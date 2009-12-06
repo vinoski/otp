@@ -1,0 +1,201 @@
+<html>
+<title>Currently in the 'pu' branch</title>
+<style type="text/css" media="all">
+    body {
+      width: 600px;
+    }
+</style>
+<body>
+<h1>Currently in the 'pu' branch</h1>
+<p>The comment about each topic branch is taken from the latest
+<em>What's cooking in erlang/otp</em> email and may no longer apply if
+the topic branch has been updated.
+<ul>
+<li><a href="http://github.com/erlang/otp/commit/4774882322c8fe0f6299cee9b6d0fb20340444d5">at/terminate-can-modify-state</a> (stdlib):
+
+<ul>
+<li><a href="http://github.com/erlang/otp/commit/aedff0561bcdacc52a51ba87b15677aea029dc7c">Add ability for gen_(server|fsm):terminate to modify state sent to error_logger</a></li>
+</ul>
+<p><i>New topic branch</i>
+<p>
+</li>
+<li><a href="http://github.com/erlang/otp/commit/9d78f7bd7c4e0212fa38932171fdf52c4cd8e515">am/kernel-stops</a> (kernel):
+
+<ul>
+<li><a href="http://github.com/erlang/otp/commit/397343b6ac1509e99fb14e577deed5bc72193227">Change restart behavior of network apps from permanent to transient</a></li>
+</ul>
+<p><i>New topic branch</i>
+<p>
+</li>
+<li><a href="http://github.com/erlang/otp/commit/eceb20ad594be2cd6b269cf1581ed488c8db2106">am/net_kernel_catchall</a> (kernel):
+
+<ul>
+<li><a href="http://github.com/erlang/otp/commit/77ee10965a568ed8aca06b5e045f4a05453d3963">Add catch all handle_call to net_kernel</a></li>
+</ul>
+<p><i>New topic branch</i>
+<p>
+</li>
+<li><a href="http://github.com/erlang/otp/commit/4c64806b4e45691fc24528463f2892aa9c58546e">jv/update-rpccall-to-use-try</a> (kernel):
+
+<ul>
+<li><a href="http://github.com/erlang/otp/commit/99b7776c78baae18834a4b274a15d8344584a878">fix rpc handling of uncaught throws</a></li>
+</ul>
+<p><i>New topic branch</i>
+<p>
+</li>
+<li><a href="http://github.com/erlang/otp/commit/5d3387c9d9d8bff7bc891a180c9849ff415f84a2">ra/include-public_key-in-ssh</a> (ssh):
+
+<ul>
+<li><a href="http://github.com/erlang/otp/commit/3a0c2c5b57ff27278ef5883926e4fbbea4e66071">Added public_key among ssh applications.</a></li>
+</ul>
+<p></li>
+<li><a href="http://github.com/erlang/otp/commit/9eab977cb8639e8040f324efb92b3dca47329b87">mh/ssh_channel-init-no-catch</a> (ssh):
+
+<ul>
+<li><a href="http://github.com/erlang/otp/commit/bb7eaa5ba450429f28b5dae72d9d0afc7b23d67c">Remove pointless catch from ssh_channel:init/1.</a></li>
+</ul>
+<p></li>
+<li><a href="http://github.com/erlang/otp/commit/4025c0828e5f3a22e0a6fd54634661dcb5eec50b">gl/jinterface-pom</a> (jinterface, otp):
+
+<ul>
+<li><a href="http://github.com/erlang/otp/commit/5acf5fa30755eef89c2b04edeccae487741ffa55">Exclude jinterface build artifact from git</a></li>
+<li><a href="http://github.com/erlang/otp/commit/aa68190592c0cabaabd275857ecd5bd04b81fd5e">Add pom.xml for jinterface build</a></li>
+</ul>
+<p>
+<font color="red">This topic branch introduces 0.5 lines with whitespace errors.</font>
+<p></li>
+<li><a href="http://github.com/erlang/otp/commit/8ed9ce5e9fa376a526b0f99473f38ac9d3dca83c">bg/compiler-bugs</a> (otp):
+
+<ul>
+<li><a href="http://github.com/erlang/otp/commit/f77e8aaaa648afb7eed868867b6cba8eab7f058f">bug: inlining a module causes an internal compiler error</a></li>
+</ul>
+<p>Reminder for a (low priority) bug to fix after the R13B04 release.
+
+<p>
+</li>
+<li><a href="http://github.com/erlang/otp/commit/4c32c452a233f28f51ee8371c2b5a0d426937ec1">bd/mnesia-activity-subscription</a> (mnesia):
+
+<ul>
+<li><a href="http://github.com/erlang/otp/commit/a564dd390d6ab834fc6c94282b9dd8898dcc4dbf">Add mnesia activity subscription message</a></li>
+</ul>
+<p></li>
+<li><a href="http://github.com/erlang/otp/commit/857a3d7b66aec72418afa68335ccd96640961e8e">ks/cleanups</a> (cosNotification, debugger, docbuilder, gs, kernel, orber, stdlib):
+
+<ul>
+<li><a href="http://github.com/erlang/otp/commit/3338f8c9d85a060b12214f7c25308376caeb7992">Add right parentheses to defines ending without them</a></li>
+<li><a href="http://github.com/erlang/otp/commit/a9d454b13eff1688fa65164d93cf3705f54aa9ec">debugger: Clean up as suggested by tidier</a></li>
+<li><a href="http://github.com/erlang/otp/commit/20d6b5e89813dbb7a9297f8212c4b836f2856afb">docbuilder: Clean up as suggested by tidier</a></li>
+<li><a href="http://github.com/erlang/otp/commit/b3453b5aca38268596d45a6015dbca82b5a53d0f">gs: Clean up as suggested by tidier</a></li>
+<li><a href="http://github.com/erlang/otp/commit/1f81c55efd689b9835b6d0581fc60ae3ff7aa7e3">Take out type declarations from file.hrl.</a></li>
+<li><a href="http://github.com/erlang/otp/commit/cafe3a0735ba9bd3b213bb9b1fa191f326154162">stdlib: Use fun object instead of {M,F} tuple</a></li>
+<li><a href="http://github.com/erlang/otp/commit/932ec62668ef7fc961f8d3b432c166c7ffd45ae3">ets: Cleanup as suggested by tidier</a></li>
+<li><a href="http://github.com/erlang/otp/commit/098f3211923f213ec7d9ba98ec05a5d48a06759a">kernel: Add types and specs + cleanup</a></li>
+<li><a href="http://github.com/erlang/otp/commit/f71b7f221c5ae52a3875dc685a6cfd50b96425c1">kernel: Clean up as suggested by tidier</a></li>
+</ul>
+<p>
+<font color="red">This topic branch introduces 1 line with whitespace errors.</font>
+<p>.
+.
+.
+
+<p>
+</li>
+<li><a href="http://github.com/erlang/otp/commit/69e2cfa24d514fe2089f080dab41c4b4611d47b0">bg/safer-local_to_univ</a> (erts):
+
+<ul>
+<li><a href="http://github.com/erlang/otp/commit/0f62f0b532013f69b7140e9bf3a4ea62dc0a4de7">erl_time_sup.c: test for error return from mktime()</a></li>
+</ul>
+<p>We will not include this branch in R13B04 for two reasons:
+
+<p>  o We are not 100% sure that this change is harmless on all
+    platforms in all timezones.
+  o We have an idea how the underlying problem can be fixed in
+    the calendar module (only) and I plan to try it out after the
+    release. We will keep this branch in pu as a reminder.
+
+<p>Action expected from: Björn Gustavsson
+
+<p>
+</li>
+<li><a href="http://github.com/erlang/otp/commit/7260817e08b92540b50534704eaa2e90e5d09e17">kr/gs-browser</a> (gs):
+
+<ul>
+<li><a href="http://github.com/erlang/otp/commit/802d15915daf790b4ff60543526ba61283933ead">Change lib/gs/src/tool_utils.erl to select multiple browsers other than Netscape</a></li>
+</ul>
+<p>This topic branch introduces a new call to the deprecated regexp module.
+
+<p>Action expected from: Topic author or anyone else with an interest to
+advance the topic
+
+<p>
+
+</li>
+<li><a href="http://github.com/erlang/otp/commit/2d6d5b3df8ebf1b518d8e3c258792ff61da1ae4a">bg/temp-hipe-fixes</a> (compiler, hipe, kernel):
+
+<ul>
+<li><a href="http://github.com/erlang/otp/commit/0e3ab3e448714ac4cdb555e764163891affc3dad">Crudely fix return type for the lists:key{search,find,member}/3</a></li>
+<li><a href="http://github.com/erlang/otp/commit/c9fc04bd0ada7f6d143a143c378ef10fbdd1c9cd">seq_trace_SUITE: Don't native-compile</a></li>
+<li><a href="http://github.com/erlang/otp/commit/bd4fe28b587a865e0e1afafa77f6ebac8e708ed1">Disable native code if on_load is used</a></li>
+<li><a href="http://github.com/erlang/otp/commit/8aadc4c5ea433544cf5f00c270ceaa53c3954211">andor_SUITE: Don't native-compile</a></li>
+</ul>
+<p>This branch contains temporary workarounds to avoid failing test
+cases and is never intended to graduate.
+
+<p>
+</li>
+<li><a href="http://github.com/erlang/otp/commit/dd024b534ae5c852c436f10bee46355d48b05d70">jp/dependencies_makefile</a> (compiler, erts):
+
+<ul>
+<li><a href="http://github.com/erlang/otp/commit/434e2ca3a238fe07bcd327ace4d90618511a98b4">squash! eliminate dialyzer warning</a></li>
+<li><a href="http://github.com/erlang/otp/commit/bf2708d3b92705320679c51ace9d2c208d779298">squash! fix snprintf for Windows</a></li>
+<li><a href="http://github.com/erlang/otp/commit/7cbc4374a3621e26067c187ce36d3e75dfa70873">Add dependencies Makefile generation to erlc(1) and compile(3)</a></li>
+</ul>
+<p>Approved in principle by the OTP Technical Board; now awaits a closer
+review of the implementation.
+
+<p>Action expected from: Björn Gustavsson (the reviewer)
+
+<p>
+</li>
+<li><a href="http://github.com/erlang/otp/commit/625ad42d0b0e4b7cff36ef6f419ed1a3cc4f0606">at/odbc_osx_fix</a> (odbc):
+
+<ul>
+<li><a href="http://github.com/erlang/otp/commit/88c71c95d23afc3d185d64b050cb5fba243d4cee">Workaround broken ODBC implementation on OSX 10.5</a></li>
+</ul>
+<p>The patch in itself is good. It solves the problem on Mac OS X
+in the only way that seems possible. Unfortunately, our
+test cases fail on Linux, and fixing it seems to require a
+backward-incompatible change to the API of the odbc module or
+ugly workarounds. The reviewer (Jakob Cederlund) will email
+the details and suggest and/or implement a solution.
+
+<p>Action expected from: OTP/Jakob Cederlund
+
+<p>
+</li>
+<li><a href="http://github.com/erlang/otp/commit/139409d5877b29eaea6aaec972c4f1a58255916e">db/tv_nthtail_fix</a> (tv):
+
+<ul>
+<li><a href="http://github.com/erlang/otp/commit/abe07595f90a5a83ce96100fbd1c0da40a765704">Fix for tv which restarts while trying to open a table</a></li>
+</ul>
+<p>I should have put this into the stalled state earlier.
+
+<p>Since our long-term goal is to migrate from gs towards wx,
+maintaining the old gs applications has a low priority for
+the Erlang/OTP team. Therefore, we will accept patches that
+seem sound, but we are unlikely to spend much of our own time
+fixing bugs.
+
+<p>The author of this topic branch has found the real reason for
+the problem, but uncovered additional issues.
+
+<p>Action expected from: The topic author - to decide whether to
+include the topic branch (which is a workaround, but does eliminate
+the crash) or to wait for a better fix from himself or someone else
+with an interest to advance the topic.
+
+<p>
+</li>
+</ul>
+</body>
+</html>
