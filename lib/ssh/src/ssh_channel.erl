@@ -139,7 +139,7 @@ init([Options]) ->
 	    Exec ->
 		proplists:get_value(init_args, Options) ++ [Exec]
 	end,
-    try Cb:init(InitArgs) of
+    case Cb:init(InitArgs) of
 	{ok, ChannelState} ->
 	    State = #state{cm = ConnectionManager, 
 			   channel_cb = Cb,
@@ -156,9 +156,6 @@ init([Options]) ->
 	    {ok, State, Timeout};
 	{stop, Why} ->
 	    {stop, Why}
-    catch 
-	_:Reason ->
-	    {stop, Reason}
     end.
 
 %%--------------------------------------------------------------------
