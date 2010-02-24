@@ -500,7 +500,10 @@ handle_call({new_ticktime,T,TP}, _, #state{tick = #tick{ticker = Tckr,
 handle_call({new_ticktime,_,_},
 	    _,
 	    #state{tick = #tick_change{time = T}} = State) ->
-    {reply, {ongoing_change_to, T}, State}.
+    {reply, {ongoing_change_to, T}, State};
+
+handle_call(_Msg, _From, State) ->
+    {noreply, State}.
 
 %% ------------------------------------------------------------
 %% handle_cast.
