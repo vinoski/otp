@@ -668,7 +668,13 @@ gen_fsm:sync_send_all_state_event -----> Module:handle_sync_event/4
         <p>This function is called by a gen_fsm when it is about to
           terminate. It should be the opposite of <c>Module:init/1</c>
           and do any necessary cleaning up. When it returns, the gen_fsm
-          terminates with <c>Reason</c>. The return value is ignored.</p>
+          terminates with <c>Reason</c>. The return
+          value is ignored except in the special case of the function
+          returning <c>{error_info, StateData}</c> which indicates that
+          the module wants that modified state data to be passed to
+          <c>error_logger:format/2</c> instead of the original state data.</p>
+        <p><c>Reason</c> is a term denoting the stop reason and
+          <c>State</c> is the internal state of the gen_server.</p>
         <p><c>Reason</c> is a term denoting the stop reason,
           <c>StateName</c> is the current state name, and
           <c>StateData</c> is the state data of the gen_fsm.</p>
