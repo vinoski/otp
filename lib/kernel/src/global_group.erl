@@ -627,6 +627,8 @@ handle_call(info, _From, S) ->
 handle_call(get, _From, S) ->
     {reply, get(), S};
 
+handle_call(stop, _From, S) ->
+    {stop, normal, stopped, S};
 
 %%%====================================================================================
 %%% Only for test suites. These tests when the search process exits.

@@ -116,13 +116,13 @@ init([]) ->
 		   Config, SafeSupervisor]}};
 	_ ->
 	    Rpc = {rex, {rpc, start_link, []}, 
-		   permanent, 2000, worker, [rpc]},
+		   transient, 2000, worker, [rpc]},
 	    Global = {global_name_server, {global, start_link, []}, 
-		      permanent, 2000, worker, [global]},
+		      transient, 2000, worker, [global]},
 	    Glo_grp = {global_group, {global_group,start_link,[]},
-		       permanent, 2000, worker, [global_group]},
+		       transient, 2000, worker, [global_group]},
 	    InetDb = {inet_db, {inet_db, start_link, []},
-		      permanent, 2000, worker, [inet_db]},
+		      transient, 2000, worker, [inet_db]},
 	    NetSup = {net_sup, {erl_distribution, start_link, []}, 
 		      permanent, infinity, supervisor,[erl_distribution]},
 	    DistAC = start_dist_ac(),

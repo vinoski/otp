@@ -1133,7 +1133,7 @@ handle_call(Request, From, #state{db=Db}=State) ->
 	    handle_rc_list(List, From, State);
 
 	stop ->
-	    {stop, normal, ok, State};
+	    {stop, normal, stopped, State};
 
 	_ ->
 	    {reply, error, State}
