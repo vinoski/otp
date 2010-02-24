@@ -421,7 +421,7 @@ called_throws(Config) when is_list(Config) ->
 				  [{args, "-pa " ++ PA}]),
     %%
     ?line rep(fun (Tag, Call, Args) ->
-		      {Tag,up} = 
+		      {Tag,{badrpc,{'EXIT',{{nocatch,up},_}}}} =
 			  {Tag,apply(rpc, Call, Args)}
 	      end, N, erlang, throw, [up]),
     ?line rep(fun (Tag, Call, Args) ->

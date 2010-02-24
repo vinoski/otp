@@ -105,11 +105,17 @@ handle_call({block_call, Mod, Fun, Args, Gleader}, _To, S) ->
     MyGL = group_leader(),
     set_group_leader(Gleader),
     Reply = 
-	case catch apply(Mod,Fun,Args) of
-	    {'EXIT', _} = Exit ->
-		{badrpc, Exit};
-	    Other ->
-		Other
+	try
+	    apply(Mod,Fun,Args)
+	catch
+	    exit:Reason ->
+		{badrpc, {'EXIT',Reason}};
+	    error:Reason ->
+		ST = erlang:get_stacktrace(),
+		{badrpc, {'EXIT',{Reason,ST}}};
+	    throw:Value ->
+		ST = erlang:get_stacktrace(),
+		{badrpc, {'EXIT',{{nocatch,Value},ST}}}
 	end,
     group_leader(MyGL, self()), % restore
     {reply, Reply, S};
@@ -200,12 +206,18 @@ handle_call_call(Mod, Fun, Args, Gleader, To, S) ->
 		  Reply = 
 		      %% in case some sucker rex'es 
 		      %% something that throws
-		      case catch apply(Mod, Fun, Args) of
-			  {'EXIT', _} = Exit ->
-			      {badrpc, Exit};
-			  Result ->
-			      Result
-		      end,
+			try
+			    apply(Mod,Fun,Args)
+			catch
+			    exit:Reason ->
+				{badrpc, {'EXIT',Reason}};
+			    error:Reason ->
+				ST = erlang:get_stacktrace(),
+				{badrpc, {'EXIT',{Reason,ST}}};
+			    throw:Value ->
+				ST = erlang:get_stacktrace(),
+				{badrpc, {'EXIT',{{nocatch,Value},ST}}}
+			end,
 		  RpcServer ! {self(), {reply, Reply}}
 	  end),
     {noreply, gb_trees:insert(Caller, To, S)}.
@@ -296,9 +308,17 @@ block_call(N,M,F,A,Timeout) when is_integer(Timeout), Timeout >= 0 ->
     do_call(N, {block_call,M,F,A,group_leader()}, Timeout).
 
 local_call(M, F, A) when is_atom(M), is_atom(F), is_list(A) ->
-    case catch apply(M, F, A) of
-	{'EXIT',_}=V -> {badrpc, V};
-	Other -> Other
+    try
+	apply(M,F,A)
+    catch
+	exit:Reason ->
+	    {badrpc, {'EXIT',Reason}};
+	error:Reason ->
+	    ST = erlang:get_stacktrace(),
+	    {badrpc, {'EXIT',{Reason,ST}}};
+	throw:Value ->
+	    ST = erlang:get_stacktrace(),
+	    {badrpc, {'EXIT',{{nocatch,Value},ST}}}
     end.
 
 do_call(Node, Request, infinity) ->
