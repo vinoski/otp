@@ -162,7 +162,7 @@
     low_val=any:create(orber_tc:long(), ?not_MinConsumerEvents), 
     high_val=any:create(orber_tc:long(), ?not_MaxConsumerEvents)
    }}
-].
+]).
 
 
 
