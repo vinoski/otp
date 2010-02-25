@@ -533,7 +533,7 @@ terminate(Reason, Name, Msg, Mod, StateName, StateData, Debug) ->
 	{'EXIT', R} ->
 	    error_info(R, Name, Msg, StateName, StateData, Debug),
 	    exit(R);
-	_ ->
+	Res ->
 	    case Reason of
 		normal ->
 		    exit(normal);
@@ -542,7 +542,14 @@ terminate(Reason, Name, Msg, Mod, StateName, StateData, Debug) ->
  		{shutdown,_}=Shutdown ->
  		    exit(Shutdown);
 		_ ->
-		    error_info(Reason, Name, Msg, StateName, StateData, Debug),
+		    ErrorStateData =
+		    case Res of
+			{error_info, NewStateData} ->
+			    NewStateData;
+			_ ->
+			   StateData
+		    end,
+		    error_info(Reason, Name, Msg, StateName, ErrorStateData, Debug),
 		    exit(Reason)
 	    end
     end.

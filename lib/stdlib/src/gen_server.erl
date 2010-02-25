@@ -696,7 +696,7 @@ terminate(Reason, Name, Msg, Mod, State, Debug) ->
 	{'EXIT', R} ->
 	    error_info(R, Name, Msg, State, Debug),
 	    exit(R);
-	_ ->
+	Res ->
 	    case Reason of
 		normal ->
 		    exit(normal);
@@ -705,7 +705,14 @@ terminate(Reason, Name, Msg, Mod, State, Debug) ->
 		{shutdown,_}=Shutdown ->
 		    exit(Shutdown);
 		_ ->
-		    error_info(Reason, Name, Msg, State, Debug),
+		    ErrorState =
+		    case Res of
+			{error_info, NewState} ->
+			    NewState;
+			_ ->
+			    State
+		    end,
+		    error_info(Reason, Name, Msg, ErrorState, Debug),
 		    exit(Reason)
 	    end
     end.

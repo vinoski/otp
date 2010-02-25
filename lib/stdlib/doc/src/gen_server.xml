@@ -539,7 +539,10 @@ gen_server:abcast     -----> Module:handle_cast/2
           terminate. It should be the opposite of <c>Module:init/1</c>
           and do any necessary cleaning up. When it returns,
           the gen_server terminates with <c>Reason</c>. The return
-          value is ignored.</p>
+          value is ignored except in the special case of the function
+          returning <c>{error_info, State}</c> which indicates that
+          the module wants that modified state data to be passed to
+          <c>error_logger:format/2</c> instead of the original state data.</p>
         <p><c>Reason</c> is a term denoting the stop reason and
           <c>State</c> is the internal state of the gen_server.</p>
         <p><c>Reason</c> depends on why the gen_server is terminating.
