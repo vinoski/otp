@@ -30,7 +30,8 @@
 	 call_remote_n1/1, call_remote_n2/1, call_remote_n3/1, spec_init/1,
 	 spec_init_local_registered_parent/1, 
 	 spec_init_global_registered_parent/1,
-	 otp_5854/1, hibernate/1, otp_7669/1, call_format_status/1
+	 otp_5854/1, hibernate/1, otp_7669/1,
+	 call_format_status/1, error_format_status/1
 	]).
 
 % spawn export
@@ -51,7 +52,8 @@ all(suite) ->
      call_remote_n2, call_remote_n3, spec_init,
      spec_init_local_registered_parent,
      spec_init_global_registered_parent,
-     otp_5854, hibernate, otp_7669, call_format_status].
+     otp_5854, hibernate, otp_7669,
+     call_format_status, error_format_status].
 
 -define(default_timeout, ?t:minutes(1)).
  
@@ -895,7 +897,7 @@ call_format_status(doc) ->
     ["Test that sys:get_status/1,2 calls format_status/2"];
 call_format_status(Config) when is_list(Config) ->
     ?line {ok, Pid} = gen_server:start_link({local, call_format_status},
-                                            gen_server_SUITE, [], []),
+					    ?MODULE, [], []),
     ?line Status1 = sys:get_status(call_format_status),
     ?line {status, Pid, _Mod, [_PDict, running, _Parent, _, Data1]} = Status1,
     ?line [format_status_called | _] = lists:reverse(Data1),
@@ -904,6 +906,34 @@ call_format_status(Config) when is_list(Config) ->
     ?line [format_status_called | _] = lists:reverse(Data2),
     ok.
 
+%% Verify that error termination correctly calls our format_status/2 fun
+%%
+error_format_status(suite) ->
+    [];
+error_format_status(doc) ->
+    ["Test that an error termination calls format_status/2"];
+error_format_status(Config) when is_list(Config) ->
+    ?line error_logger_forwarder:register(),
+    OldFl = process_flag(trap_exit, true),
+    State = "called format_status",
+    ?line {ok, Pid} = gen_server:start_link(?MODULE, {state, State}, []),
+    ?line {'EXIT',{crashed,_}} = (catch gen_server:call(Pid, crash)),
+    receive
+	{'EXIT', Pid, crashed} ->
+	    ok
+    end,
+    receive
+	{error,_GroupLeader,{Pid,
+			     "** Generic server"++_,
+			     [Pid,crash,State,crashed]}} ->
+	    ok;
+	Other ->
+ 	    ?line io:format("Unexpected: ~p", [Other]),
+ 	    ?line ?t:fail()
+    end,
+    ?t:messages_get(),
+    process_flag(trap_exit, OldFl),
+    ok.
 
 %%--------------------------------------------------------------
 %% Help functions to spec_init_*
@@ -1064,5 +1094,7 @@ terminate({From, stopped_info}, _State) ->
 terminate(_Reason, _State) ->
     ok.
 
-format_status(_Opt, [_PDict, _State]) ->
-    [format_status_called].
+format_status(terminate, [_PDict, State]) ->
+    State;
+format_status(normal, [_PDict, _State]) ->
+    format_status_called.
