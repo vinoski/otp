@@ -1637,7 +1637,7 @@ static Boolean decode_params(db_state *state, byte *buffer, int *index, param_ar
 	break;
 	
     case SQL_C_DOUBLE: 
-	    if((erl_type != ERL_FLOAT_EXT)) { 
+        if((erl_type != ERL_FLOAT_EXT) && (erl_type != NEW_FLOAT_EXT)) { 
 		    return FALSE;
 	    } 
 	    ei_decode_double(buffer, index, &(param->values.floating[j])); 
