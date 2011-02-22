@@ -21,6 +21,10 @@
 #  error This file should not be included directly
 #endif
 
+/*
+** WARNING: add new ERL_NIF_API_FUNC_DECL entries at the bottom of the list
+** to keep compatibility on Windows!!!
+*/
 #ifdef ERL_NIF_API_FUNC_DECL
 ERL_NIF_API_FUNC_DECL(void*,enif_priv_data,(ErlNifEnv*));
 ERL_NIF_API_FUNC_DECL(void*,enif_alloc,(size_t size));
@@ -128,12 +132,17 @@ ERL_NIF_API_FUNC_DECL(int,enif_get_uint64,(ErlNifEnv*, ERL_NIF_TERM term, ErlNif
 ERL_NIF_API_FUNC_DECL(ERL_NIF_TERM,enif_make_int64,(ErlNifEnv*, ErlNifSInt64));
 ERL_NIF_API_FUNC_DECL(ERL_NIF_TERM,enif_make_uint64,(ErlNifEnv*, ErlNifUInt64));
 #endif
+ERL_NIF_API_FUNC_DECL(int,enif_is_exception,(ErlNifEnv*, ERL_NIF_TERM term));
 
 /*
-** Add last to keep compatibility on Windows!!!
+** Add new entries here to keep compatibility on Windows!!!
 */
 #endif
 
+/*
+** Please keep the ERL_NIF_API_FUNC_MACRO list below in the same order
+** as the ERL_NIF_API_FUNC_DECL list above
+*/
 #ifdef ERL_NIF_API_FUNC_MACRO
 #  define enif_priv_data ERL_NIF_API_FUNC_MACRO(enif_priv_data)
 #  define enif_alloc ERL_NIF_API_FUNC_MACRO(enif_alloc)
@@ -243,6 +252,11 @@ ERL_NIF_API_FUNC_DECL(ERL_NIF_TERM,enif_make_uint64,(ErlNifEnv*, ErlNifUInt64));
 #  define enif_make_uint64 ERL_NIF_API_FUNC_MACRO(enif_make_uint64)
 #endif
 
+#  define enif_is_exception ERL_NIF_API_FUNC_MACRO(enif_is_exception)
+
+/*
+** Add new entries here
+*/
 #endif
 
 #ifndef enif_make_list1
