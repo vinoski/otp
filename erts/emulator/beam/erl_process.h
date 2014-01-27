@@ -1236,6 +1236,8 @@ extern struct erts_system_profile_flags_t erts_system_profile_flags;
    &erts_aligned_run_queues[(IX)].runq)
 #define ERTS_DIRTY_CPU_RUNQ (&erts_aligned_run_queues[-1].runq)
 #define ERTS_DIRTY_IO_RUNQ  (&erts_aligned_run_queues[-2].runq)
+#define ERTS_RUNQ_IS_DIRTY_CPU_RUNQ(RQ) ((RQ)->ix == -1)
+#define ERTS_RUNQ_IS_DIRTY_IO_RUNQ(RQ) ((RQ)->ix == -2)
 #else
 #define ERTS_RUNQ_IX_IS_DIRTY(IX) 0
 #endif
@@ -1470,7 +1472,11 @@ ErtsSchedSuspendResult
 erts_set_schedulers_online(Process *p,
 			   ErtsProcLocks plocks,
 			   Sint new_no,
-			   Sint *old_no);
+			   Sint *old_no
+#ifdef ERTS_DIRTY_SCHEDULERS
+			   , int dirty_only
+#endif
+			   );
 ErtsSchedSuspendResult
 erts_block_multi_scheduling(Process *, ErtsProcLocks, int, int);
 int erts_is_multi_scheduling_blocked(void);
