@@ -2307,29 +2307,31 @@ document etp-aux-work-flags
 %---------------------------------------------------------------------------
 end
 
-define etp-schedulers
+define etp-sched-common
+# Args: int string ErtsSchedulerData*
+#
   if (!erts_initialized)
     printf "No schedulers, since system isn't initialized!\n"
   else
     set $sched_ix = 0
-    while $sched_ix < erts_no_schedulers
-      printf "--- Scheduler %d ---\n", $sched_ix+1
+    while $sched_ix < $arg0
+      printf "--- %s %d ---\n", $arg1, $sched_ix+1
       printf " IX: %d\n", $sched_ix
-      if (erts_aligned_scheduler_data[$sched_ix].esd.cpu_id < 0)
+      if (($arg2)[$sched_ix].esd.cpu_id < 0)
         printf " CPU Binding: unbound\n"
       else
-        printf " CPU Binding: %d\n", erts_aligned_scheduler_data[$sched_ix].esd.cpu_id
+        printf " CPU Binding: %d\n", ($arg2)[$sched_ix].esd.cpu_id
       end
       printf " Aux work Flags:"
-      set $aux_work_flags = *((Uint32 *) &erts_aligned_scheduler_data[$sched_ix].esd.ssi->aux_work)
+      set $aux_work_flags = *((Uint32 *) &($arg2)[$sched_ix].esd.ssi->aux_work)
       etp-aux-work-flags $aux_work_flags
       printf " Sleep Info Flags:"
-      set $ssi_flags = *((Uint32 *) &erts_aligned_scheduler_data[$sched_ix].esd.ssi->flags)
+      set $ssi_flags = *((Uint32 *) &($arg2)[$sched_ix].esd.ssi->flags)
       etp-ssi-flags $ssi_flags
-      printf " Pointer: (ErtsSchedulerData *) %p\n", &erts_aligned_scheduler_data[$sched_ix].esd
+      printf " Pointer: (ErtsSchedulerData *) %p\n", &($arg2)[$sched_ix].esd
       printf " - Run Queue -\n"
       if (etp_smp_compiled)
-        set $runq = erts_aligned_scheduler_data[$sched_ix].esd.run_queue
+        set $runq = ($arg2)[$sched_ix].esd.run_queue
       else
         set $runq = &erts_aligned_run_queues[0].runq
       end
@@ -2354,11 +2356,39 @@ define etp-schedulers
   end
 end
 
+define etp-schedulers
+  etp-sched-common erts_no_schedulers "Scheduler" erts_aligned_scheduler_data
+end
+
 document etp-schedulers
 %---------------------------------------------------------------------------
 % etp-schedulers
 % 
 % Print misc info about all schedulers
+%---------------------------------------------------------------------------
+end
+
+define etp-dirty-cpu-schedulers
+  etp-sched-common erts_no_dirty_cpu_schedulers "Dirty CPU scheduler" erts_aligned_dirty_cpu_scheduler_data
+end
+
+document etp-dirty-cpu-schedulers
+%---------------------------------------------------------------------------
+% etp-dirty-cpu-schedulers
+%
+% Print misc info about all dirty CPU schedulers
+%---------------------------------------------------------------------------
+end
+
+define etp-dirty-io-schedulers
+  etp-sched-common erts_no_dirty_io_schedulers "Dirty I/O scheduler" erts_aligned_dirty_io_scheduler_data
+end
+
+document etp-dirty-io-schedulers
+%---------------------------------------------------------------------------
+% etp-dirty-io-schedulers
+%
+% Print misc info about all dirty I/O schedulers
 %---------------------------------------------------------------------------
 end
 
