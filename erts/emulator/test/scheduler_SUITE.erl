@@ -1117,7 +1117,7 @@ dirty_scheduler_threads_test(Config, SmpSupport) ->
     {HalfSched, HalfSchedOnln, _} = get_dsstate(Config, Cmd1),
     {HalfSched, HalfSchedOnln, _} = get_dsstate(Config, "+SDPcpu 50:50"),
     IOSched = 20,
-    {_, _, IOSched} = get_dsstate(Config, "+SDio"++integer_to_list(IOSched)),
+    {_, _, IOSched} = get_dsstate(Config, "+SDio "++integer_to_list(IOSched)),
     ok.
 
 get_sstate(Config, Cmd) ->
@@ -1215,11 +1215,11 @@ sst2_loop(N) ->
 
 sst3_loop(S, N) ->
     try erlang:system_info(dirty_cpu_schedulers) of
-	_ ->
-	    sst3_loop_normal_schedulers_only(S, N)
+	DS ->
+	    sst3_loop_with_dirty_schedulers(S, DS, N)
     catch
 	error:badarg ->
-	    sst3_loop_with_dirty_schedulers(S, N)
+	    sst3_loop_normal_schedulers_only(S, N)
     end.
 
 sst3_loop_normal_schedulers_only(_S, 0) ->
@@ -1233,19 +1233,19 @@ sst3_loop_normal_schedulers_only(S, N) ->
     erlang:system_flag(schedulers_online, S),
     sst3_loop_normal_schedulers_only(S, N-1).
 
-sst3_loop_with_dirty_schedulers(_S, 0) ->
+sst3_loop_with_dirty_schedulers(_S, _DS, 0) ->
     ok;
-sst3_loop_with_dirty_schedulers(S, N) ->
+sst3_loop_with_dirty_schedulers(S, DS, N) ->
     erlang:system_flag(schedulers_online, (S div 2)+1),
-    erlang:system_flag(dirty_cpu_schedulers_online, (S div 2)+1),
+    erlang:system_flag(dirty_cpu_schedulers_online, (DS div 2)+1),
     erlang:system_flag(schedulers_online, 1),
     erlang:system_flag(schedulers_online, (S div 2)+1),
     erlang:system_flag(dirty_cpu_schedulers_online, 1),
     erlang:system_flag(schedulers_online, S),
     erlang:system_flag(schedulers_online, 1),
-    erlang:system_flag(dirty_cpu_schedulers_online, 5),
+    erlang:system_flag(dirty_cpu_schedulers_online, DS),
     erlang:system_flag(schedulers_online, S),
-    sst3_loop_with_dirty_schedulers(S, N-1).
+    sst3_loop_with_dirty_schedulers(S, DS, N-1).
 
 reader_groups(Config) when is_list(Config) ->
     %% White box testing. These results are correct, but other results
