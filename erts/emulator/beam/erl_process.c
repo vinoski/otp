@@ -147,7 +147,6 @@ int erts_sched_compact_load;
 Uint erts_no_schedulers;
 #ifdef ERTS_DIRTY_SCHEDULERS
 Uint erts_no_dirty_cpu_schedulers;
-Uint erts_no_dirty_cpu_schedulers_online;
 Uint erts_no_dirty_io_schedulers;
 #endif
 
@@ -4847,7 +4846,12 @@ init_scheduler_data(ErtsSchedulerData* esdp, int num,
 }
 
 void
-erts_init_scheduling(int no_schedulers, int no_schedulers_online)
+erts_init_scheduling(int no_schedulers, int no_schedulers_online
+#ifdef ERTS_DIRTY_SCHEDULERS
+		     , int no_dirty_cpu_schedulers, int no_dirty_cpu_schedulers_online,
+		     int no_dirty_io_schedulers
+#endif
+		     )
 {
     int ix, n, no_ssi;
     char *daww_ptr;
@@ -4865,10 +4869,10 @@ erts_init_scheduling(int no_schedulers, int no_schedulers_online)
     ASSERT(no_schedulers_online >= 1);
     ASSERT(no_schedulers >= 1);
 #ifdef ERTS_DIRTY_SCHEDULERS
-    ASSERT(erts_no_dirty_cpu_schedulers <= no_schedulers);
-    ASSERT(erts_no_dirty_cpu_schedulers >= 1);
-    ASSERT(erts_no_dirty_cpu_schedulers_online <= no_schedulers_online);
-    ASSERT(erts_no_dirty_cpu_schedulers_online >= 1);
+    ASSERT(no_dirty_cpu_schedulers <= no_schedulers);
+    ASSERT(no_dirty_cpu_schedulers >= 1);
+    ASSERT(no_dirty_cpu_schedulers_online <= no_schedulers_online);
+    ASSERT(no_dirty_cpu_schedulers_online >= 1);
 #endif
 
     /* Create and initialize run queues */
@@ -4968,6 +4972,10 @@ erts_init_scheduling(int no_schedulers, int no_schedulers_online)
 
     n = (int) no_schedulers;
     erts_no_schedulers = n;
+#ifdef ERTS_DIRTY_SCHEDULERS
+    erts_no_dirty_cpu_schedulers = no_dirty_cpu_schedulers;
+    erts_no_dirty_io_schedulers = no_dirty_io_schedulers;
+#endif
 
     /* Create and initialize scheduler sleep info */
 #ifdef ERTS_SMP
@@ -4999,8 +5007,8 @@ erts_init_scheduling(int no_schedulers, int no_schedulers_online)
     aligned_dirty_cpu_sched_sleep_info =
 	erts_alloc_permanent_cache_aligned(
 	    ERTS_ALC_T_SCHDLR_SLP_INFO,
-	    erts_no_dirty_cpu_schedulers*sizeof(ErtsAlignedSchedulerSleepInfo));
-    for (ix = 0; ix < erts_no_dirty_cpu_schedulers; ix++) {
+	    no_dirty_cpu_schedulers*sizeof(ErtsAlignedSchedulerSleepInfo));
+    for (ix = 0; ix < no_dirty_cpu_schedulers; ix++) {
 	ErtsSchedulerSleepInfo *ssi = &aligned_dirty_cpu_sched_sleep_info[ix].ssi;
 	erts_smp_atomic32_init_nob(&ssi->flags, 0);
 	ssi->event = NULL; /* initialized in sched_dirty_cpu_thread_func */
@@ -5009,8 +5017,8 @@ erts_init_scheduling(int no_schedulers, int no_schedulers_online)
     aligned_dirty_io_sched_sleep_info =
 	erts_alloc_permanent_cache_aligned(
 	    ERTS_ALC_T_SCHDLR_SLP_INFO,
-	    erts_no_dirty_io_schedulers*sizeof(ErtsAlignedSchedulerSleepInfo));
-    for (ix = 0; ix < erts_no_dirty_io_schedulers; ix++) {
+	    no_dirty_io_schedulers*sizeof(ErtsAlignedSchedulerSleepInfo));
+    for (ix = 0; ix < no_dirty_io_schedulers; ix++) {
 	ErtsSchedulerSleepInfo *ssi = &aligned_dirty_io_sched_sleep_info[ix].ssi;
 	erts_smp_atomic32_init_nob(&ssi->flags, 0);
 	ssi->event = NULL; /* initialized in sched_dirty_io_thread_func */
@@ -5046,8 +5054,8 @@ erts_init_scheduling(int no_schedulers, int no_schedulers_online)
     erts_aligned_dirty_cpu_scheduler_data =
 	erts_alloc_permanent_cache_aligned(
 					   ERTS_ALC_T_SCHDLR_DATA,
-					   erts_no_dirty_cpu_schedulers*sizeof(ErtsAlignedSchedulerData));
-    for (ix = 0; ix < erts_no_dirty_cpu_schedulers; ix++) {
+					   no_dirty_cpu_schedulers*sizeof(ErtsAlignedSchedulerData));
+    for (ix = 0; ix < no_dirty_cpu_schedulers; ix++) {
 	ErtsSchedulerData *esdp = ERTS_DIRTY_CPU_SCHEDULER_IX(ix);
 	init_scheduler_data(esdp, ix+1, ERTS_DIRTY_CPU_SCHED_SLEEP_INFO_IX(ix),
 			    ERTS_DIRTY_CPU_RUNQ, NULL, 0);
@@ -5055,8 +5063,8 @@ erts_init_scheduling(int no_schedulers, int no_schedulers_online)
     erts_aligned_dirty_io_scheduler_data =
 	erts_alloc_permanent_cache_aligned(
 					   ERTS_ALC_T_SCHDLR_DATA,
-					   erts_no_dirty_io_schedulers*sizeof(ErtsAlignedSchedulerData));
-    for (ix = 0; ix < erts_no_dirty_io_schedulers; ix++) {
+					   no_dirty_io_schedulers*sizeof(ErtsAlignedSchedulerData));
+    for (ix = 0; ix < no_dirty_io_schedulers; ix++) {
 	ErtsSchedulerData *esdp = ERTS_DIRTY_IO_SCHEDULER_IX(ix);
 	init_scheduler_data(esdp, ix+1, ERTS_DIRTY_IO_SCHED_SLEEP_INFO_IX(ix),
 			    ERTS_DIRTY_IO_RUNQ, NULL, 0);
@@ -5088,13 +5096,13 @@ erts_init_scheduling(int no_schedulers, int no_schedulers_online)
     erts_smp_atomic32_init_nob(&schdlr_sspnd.active, no_schedulers);
 #ifdef ERTS_DIRTY_SCHEDULERS
     erts_smp_atomic32_init_nob(&schdlr_sspnd.dirty_cpu_changing, 0);
-    schdlr_sspnd.dirty_cpu_online = erts_no_dirty_cpu_schedulers_online;
-    schdlr_sspnd.dirty_cpu_curr_online = erts_no_dirty_cpu_schedulers;
-    erts_smp_atomic32_init_nob(&schdlr_sspnd.dirty_cpu_active, erts_no_dirty_cpu_schedulers);
+    schdlr_sspnd.dirty_cpu_online = no_dirty_cpu_schedulers_online;
+    schdlr_sspnd.dirty_cpu_curr_online = no_dirty_cpu_schedulers;
+    erts_smp_atomic32_init_nob(&schdlr_sspnd.dirty_cpu_active, no_dirty_cpu_schedulers);
     erts_smp_atomic32_init_nob(&schdlr_sspnd.dirty_io_changing, 0);
-    schdlr_sspnd.dirty_io_online = erts_no_dirty_io_schedulers;
-    schdlr_sspnd.dirty_io_curr_online = erts_no_dirty_io_schedulers;
-    erts_smp_atomic32_init_nob(&schdlr_sspnd.dirty_io_active, erts_no_dirty_io_schedulers);
+    schdlr_sspnd.dirty_io_online = no_dirty_io_schedulers;
+    schdlr_sspnd.dirty_io_curr_online = no_dirty_io_schedulers;
+    erts_smp_atomic32_init_nob(&schdlr_sspnd.dirty_io_active, no_dirty_io_schedulers);
 #endif
     schdlr_sspnd.msb.procs = NULL;
     init_no_runqs(no_schedulers_online, no_schedulers_online);
@@ -5122,19 +5130,19 @@ erts_init_scheduling(int no_schedulers, int no_schedulers_online)
     ERTS_SCHDLR_SSPND_CHNG_SET((ERTS_SCHDLR_SSPND_CHNG_ONLN
 				| ERTS_SCHDLR_SSPND_CHNG_WAITER), 0);
 #ifdef ERTS_DIRTY_SCHEDULERS
-    schdlr_sspnd.dirty_cpu_wait_curr_online = erts_no_dirty_cpu_schedulers_online;
+    schdlr_sspnd.dirty_cpu_wait_curr_online = no_dirty_cpu_schedulers_online;
     schdlr_sspnd.dirty_cpu_curr_online *= 2;
     ERTS_SCHDLR_SSPND_DIRTY_CPU_CHNG_SET((ERTS_SCHDLR_SSPND_CHNG_ONLN
 					  | ERTS_SCHDLR_SSPND_CHNG_WAITER), 0);
-    if (erts_no_dirty_cpu_schedulers_online < erts_no_dirty_cpu_schedulers) {
-	for (ix = erts_no_dirty_cpu_schedulers_online; ix < erts_no_dirty_cpu_schedulers; ix++) {
+    if (no_dirty_cpu_schedulers_online < no_dirty_cpu_schedulers) {
+	for (ix = no_dirty_cpu_schedulers_online; ix < no_dirty_cpu_schedulers; ix++) {
 	    ErtsSchedulerData* esdp = ERTS_DIRTY_CPU_SCHEDULER_IX(ix);
 	    erts_smp_atomic32_read_bor_nob(&esdp->ssi->flags, ERTS_SSI_FLG_SUSPENDED);
 	}
 	wake_dirty_schedulers(ERTS_DIRTY_CPU_RUNQ);
     }
 
-    schdlr_sspnd.dirty_io_wait_curr_online = erts_no_dirty_io_schedulers;
+    schdlr_sspnd.dirty_io_wait_curr_online = no_dirty_io_schedulers;
     schdlr_sspnd.dirty_io_curr_online *= 2;
     ERTS_SCHDLR_SSPND_DIRTY_IO_CHNG_SET((ERTS_SCHDLR_SSPND_CHNG_ONLN
 					 | ERTS_SCHDLR_SSPND_CHNG_WAITER), 0);

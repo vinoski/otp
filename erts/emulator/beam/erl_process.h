@@ -105,7 +105,6 @@ extern int erts_sched_compact_load;
 extern Uint erts_no_schedulers;
 #ifdef ERTS_DIRTY_SCHEDULERS
 extern Uint erts_no_dirty_cpu_schedulers;
-extern Uint erts_no_dirty_cpu_schedulers_online;
 extern Uint erts_no_dirty_io_schedulers;
 #endif
 extern Uint erts_no_run_queues;
@@ -1265,7 +1264,11 @@ extern struct erts_system_profile_flags_t erts_system_profile_flags;
 void erts_pre_init_process(void);
 void erts_late_init_process(void);
 void erts_early_init_scheduling(int);
-void erts_init_scheduling(int, int);
+void erts_init_scheduling(int, int
+#ifdef ERTS_DIRTY_SCHEDULERS
+			  , int, int, int
+#endif
+			  );
 
 int erts_set_gc_state(Process *c_p, int enable);
 Eterm erts_sched_wall_time_request(Process *c_p, int set, int enable);
