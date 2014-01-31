@@ -3279,7 +3279,10 @@ resume_run_queue(ErtsRunQueue *rq)
 
     erts_smp_runq_unlock(rq);
 
-    scheduler_ix_resume_wake(rq->ix);
+#ifdef ERTS_DIRTY_SCHEDULERS
+    if (!ERTS_RUNQ_IX_IS_DIRTY(rq->ix))
+#endif
+	scheduler_ix_resume_wake(rq->ix);
 }
 
 typedef struct {
@@ -3310,20 +3313,29 @@ evacuate_run_queue(ErtsRunQueue *rq,
     int prio_q;
     ErtsRunQueue *to_rq;
     ErtsMigrationPaths *mps;
-    ErtsMigrationPath *mp;
+    ErtsMigrationPath *mp = NULL;
 
     ERTS_SMP_LC_ASSERT(erts_smp_lc_runq_is_locked(rq));
 
     (void) ERTS_RUNQ_FLGS_UNSET(rq, ERTS_RUNQ_FLG_PROTECTED);
 
-    mps = erts_get_migration_paths_managed();
-    mp = &mps->mpath[rq->ix];
+#ifdef ERTS_DIRTY_SCHEDULERS
+    if (!ERTS_RUNQ_IX_IS_DIRTY(rq->ix)) {
+#endif
+	mps = erts_get_migration_paths_managed();
+	mp = &mps->mpath[rq->ix];
+#ifdef ERTS_DIRTY_SCHEDULERS
+    }
+#endif
 
     /* Evacuate scheduled misc ops */
 
     if (rq->misc.start) {
 	ErtsMiscOpList *start, *end;
 
+#ifdef ERTS_DIRTY_SCHEDULERS
+	ASSERT(!ERTS_RUNQ_IX_IS_DIRTY(rq->ix));
+#endif
 	to_rq = mp->misc_evac_runq;
 	if (!to_rq)
 	    return;
@@ -3349,6 +3361,9 @@ evacuate_run_queue(ErtsRunQueue *rq,
     if (rq->ports.start) {
 	Port *prt;
 
+#ifdef ERTS_DIRTY_SCHEDULERS
+	ASSERT(!ERTS_RUNQ_IX_IS_DIRTY(rq->ix));
+#endif
 	to_rq = mp->prio[ERTS_PORT_PRIO_LEVEL].runq;
 	if (!to_rq)
 	    return;
@@ -3384,15 +3399,25 @@ evacuate_run_queue(ErtsRunQueue *rq,
 	erts_aint32_t state;
 	Process *proc;
 	int notify = 0;
+#ifdef ERTS_DIRTY_SCHEDULERS
+	int requeue;
+#endif
 	to_rq = NULL;
 
-	if (!mp->prio[prio_q].runq)
-	    return;
-	if (prio_q == PRIORITY_NORMAL && !mp->prio[PRIORITY_LOW].runq)
-	    return;
+#ifdef ERTS_DIRTY_SCHEDULERS
+	if (!ERTS_RUNQ_IX_IS_DIRTY(rq->ix)) {
+#endif
+	    if (!mp->prio[prio_q].runq)
+		return;
+	    if (prio_q == PRIORITY_NORMAL && !mp->prio[PRIORITY_LOW].runq)
+		return;
+#ifdef ERTS_DIRTY_SCHEDULERS
+	}
+#endif
 
 	proc = dequeue_process(rq, prio_q, &state);
 	while (proc) {
+	    requeue = 1;
 	    if (ERTS_PSFLG_BOUND & state) {
 		/* Bound processes get stuck here... */
 		proc->next = NULL;
@@ -3401,12 +3426,37 @@ evacuate_run_queue(ErtsRunQueue *rq,
 		else
 		    sbpp->first = proc;
 		sbpp->last = proc;
+		requeue = 0;
 	    }
+#ifdef ERTS_DIRTY_SCHEDULERS
+	    else if (state & (ERTS_PSFLG_DIRTY_CPU_PROC_IN_Q|ERTS_PSFLG_DIRTY_IO_PROC_IN_Q)) {
+		erts_aint32_t n, a = state;
+		while (1) {
+		    n = state = a;
+		    n &= ~(ERTS_PSFLG_DIRTY_CPU_PROC|ERTS_PSFLG_DIRTY_IO_PROC
+			   |ERTS_PSFLG_DIRTY_CPU_PROC_IN_Q|ERTS_PSFLG_DIRTY_IO_PROC_IN_Q);
+		    a = erts_smp_atomic32_cmpxchg_mb(&proc->state, n, state);
+		    if (a == state)
+			break;
+		}
+	    }
+	    if (requeue) {
+#else
 	    else {
+#endif
 		int prio = (int) ERTS_PSFLGS_GET_PRQ_PRIO(state);
 		erts_smp_runq_unlock(rq);
 
-		to_rq = mp->prio[prio].runq;
+#ifdef ERTS_DIRTY_SCHEDULERS
+		if (ERTS_RUNQ_IX_IS_DIRTY(rq->ix))
+		    /*
+		     * dirty run queues evacuate only to run
+		     * queue 0 during multi-scheduling blocking
+		     */
+		    to_rq = ERTS_RUNQ_IX(0);
+		else
+#endif
+		    to_rq = mp->prio[prio].runq;
 		RUNQ_SET_RQ(&proc->run_queue, to_rq);
 
 		erts_smp_runq_lock(to_rq);
@@ -5321,7 +5371,7 @@ check_enqueue_in_prio_queue(erts_aint32_t *prq_prio_p,
 }
 
 /*
- * scheduler_out_process() return with c_rq locked.
+ * schedule_out_process() return with c_rq locked.
  */
 static ERTS_INLINE int
 schedule_out_process(ErtsRunQueue *c_rq, erts_aint32_t state, Process *p, Process *proxy)
@@ -5372,10 +5422,30 @@ schedule_out_process(ErtsRunQueue *c_rq, erts_aint32_t state, Process *p, Proces
 
 #ifdef ERTS_DIRTY_SCHEDULERS
 #ifdef ERTS_SMP
-	if (ERTS_PSFLG_DIRTY_CPU_PROC & a)
-	    runq = ERTS_DIRTY_CPU_RUNQ;
-	else if (ERTS_PSFLG_DIRTY_IO_PROC & a)
-	    runq = ERTS_DIRTY_IO_RUNQ;
+	/*
+	 * Check the dirty run queues for suspension. If they're
+	 * suspended, that means multi-scheduling is blocked, so
+	 * dirty jobs need to be scheduled on an ordinary scheduler
+	 */
+	if ((ERTS_PSFLG_DIRTY_CPU_PROC|ERTS_PSFLG_DIRTY_IO_PROC) & a) {
+	    Uint32 flgs;
+	    runq = (ERTS_PSFLG_DIRTY_CPU_PROC & a) ? ERTS_DIRTY_CPU_RUNQ :
+		ERTS_DIRTY_IO_RUNQ;
+	    flgs = ERTS_RUNQ_FLGS_GET(runq);
+	    if (flgs & ERTS_RUNQ_FLG_SUSPENDED) {
+		erts_aint32_t nstate;
+		a = erts_smp_atomic32_read_acqb(&p->state);
+		while (1) {
+		    n = nstate = a;
+		    n &= ~(ERTS_PSFLG_DIRTY_CPU_PROC|ERTS_PSFLG_DIRTY_IO_PROC
+			   |ERTS_PSFLG_DIRTY_CPU_PROC_IN_Q|ERTS_PSFLG_DIRTY_IO_PROC_IN_Q);
+		    a = erts_smp_atomic32_cmpxchg_mb(&p->state, n, nstate);
+		    if (a == nstate)
+			break;
+		}
+		runq = NULL;
+	    }
+	}
 #endif
 #endif
 	if (!runq)
@@ -5830,22 +5900,22 @@ suspend_scheduler(ErtsSchedulerData *esdp)
      * Schedulers may be suspended in two different ways:
      * - A scheduler may be suspended since it is not online.
      *   All schedulers with scheduler ids greater than
-     *   schdlr_sspnd.online are suspended.
+     *   schdlr_sspnd.online are suspended; same for dirty
+     *   schedulers and schdlr_sspnd.dirty_cpu_online and
+     *   schdlr_sspnd.dirty_io_online.
      * - Multi scheduling is blocked. All schedulers except the
-     *   scheduler with scheduler id 1 are suspended.
+     *   scheduler with scheduler id 1 are suspended, and all
+     *   dirty CPU and dirty I/O schedulers are suspended.
      *
      * Regardless of why a scheduler is suspended, it ends up here.
      */
 
 #ifdef ERTS_DIRTY_SCHEDULERS
-    if (!ERTS_SCHEDULER_IS_DIRTY(esdp)) {
+    if (!ERTS_SCHEDULER_IS_DIRTY(esdp))
 #endif
 	ASSERT(no != 1);
 
-	evacuate_run_queue(esdp->run_queue, &sbp);
-#ifdef ERTS_DIRTY_SCHEDULERS
-    }
-#endif
+    evacuate_run_queue(esdp->run_queue, &sbp);
 
     erts_smp_runq_unlock(esdp->run_queue);
 
@@ -6317,7 +6387,8 @@ erts_set_schedulers_online(Process *p,
 		    }
 #ifdef ERTS_DIRTY_SCHEDULERS
 		}
-		if (erts_smp_atomic32_read_nob(&schdlr_sspnd.dirty_cpu_active) > 0 &&
+		if ((dirty_only || also_change_dirty) &&
+		    erts_smp_atomic32_read_nob(&schdlr_sspnd.dirty_cpu_active) > 0 &&
 		    schdlr_sspnd.dirty_cpu_curr_online != schdlr_sspnd.dirty_cpu_wait_curr_online) {
 		    ERTS_SCHDLR_SSPND_DIRTY_CPU_CHNG_SET((ERTS_SCHDLR_SSPND_CHNG_ONLN
 							  | ERTS_SCHDLR_SSPND_CHNG_WAITER), 0);
@@ -6459,6 +6530,7 @@ erts_block_multi_scheduling(Process *p, ErtsProcLocks plocks, int on, int all)
 		    while (erts_smp_atomic32_read_nob(&schdlr_sspnd.dirty_cpu_active)
 			   != schdlr_sspnd.msb.dirty_cpu_wait_active)
 			erts_smp_cnd_wait(&schdlr_sspnd.cnd, &schdlr_sspnd.mtx);
+		    (void) ERTS_RUNQ_FLGS_SET(ERTS_DIRTY_CPU_RUNQ, ERTS_RUNQ_FLG_SUSPENDED);
 		    ERTS_SCHDLR_SSPND_DIRTY_CPU_CHNG_SET(0, ERTS_SCHDLR_SSPND_CHNG_WAITER);
 		}
 
@@ -6475,6 +6547,7 @@ erts_block_multi_scheduling(Process *p, ErtsProcLocks plocks, int on, int all)
 		    while (erts_smp_atomic32_read_nob(&schdlr_sspnd.dirty_io_active)
 			   != schdlr_sspnd.msb.dirty_io_wait_active)
 			erts_smp_cnd_wait(&schdlr_sspnd.cnd, &schdlr_sspnd.mtx);
+		    (void) ERTS_RUNQ_FLGS_SET(ERTS_DIRTY_IO_RUNQ, ERTS_RUNQ_FLG_SUSPENDED);
 		    ERTS_SCHDLR_SSPND_DIRTY_IO_CHNG_SET(0, ERTS_SCHDLR_SSPND_CHNG_WAITER);
 		}
 #endif
@@ -6539,8 +6612,10 @@ erts_block_multi_scheduling(Process *p, ErtsProcLocks plocks, int on, int all)
     }
     else {  /* ------ UNBLOCK ------ */
 #ifdef ERTS_DIRTY_SCHEDULERS
+	resume_run_queue(ERTS_DIRTY_CPU_RUNQ);
 	for (ix = 0; ix < schdlr_sspnd.dirty_cpu_online; ix++)
 	    scheduler_ssi_resume_wake(ERTS_DIRTY_CPU_SCHED_SLEEP_INFO_IX(ix));
+	resume_run_queue(ERTS_DIRTY_IO_RUNQ);
 	for (ix = 0; ix < schdlr_sspnd.dirty_io_online; ix++)
 	    scheduler_ssi_resume_wake(ERTS_DIRTY_IO_SCHED_SLEEP_INFO_IX(ix));
 #endif
