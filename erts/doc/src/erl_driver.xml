@@ -1903,7 +1903,7 @@ ERL_DRV_MAP          int sz
       <desc>
         <marker id="driver_output_term"></marker>
 	<warning><p><c>driver_output_term()</c> is deprecated and will
-	            be removed in the OTP-R17 release. Use
+	            be removed in Erlang/OTP 18. Use
 		    <seealso marker="#erl_drv_send_term">erl_drv_output_term()</seealso>
 		    instead.</p>
 	</warning>
@@ -1961,7 +1961,7 @@ ERL_DRV_MAP          int sz
       <desc>
         <marker id="driver_send_term"></marker>
 	<warning><p><c>driver_send_term()</c> is deprecated and will
-	            be removed in the OTP-R17 release. Use
+	            be removed in Erlang/OTP 18. Use
 		    <seealso marker="#erl_drv_send_term">erl_drv_send_term()</seealso>
 		    instead.</p>
 		 <p>Also note that parameters of <c>driver_send_term()</c>

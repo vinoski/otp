@@ -5668,7 +5668,7 @@ int erl_drv_output_term(ErlDrvTermData port_id, ErlDrvTermData* data, int len)
 
 /*
  * driver_output_term() is deprecated, and has been scheduled for
- * removal in OTP-R17. It is replaced by erl_drv_output_term()
+ * removal in Erlang/OTP 18. It is replaced by erl_drv_output_term()
  * above.
  */
 int 
@@ -5704,7 +5704,7 @@ int erl_drv_send_term(ErlDrvTermData port_id,
 
 /*
  * driver_send_term() is deprecated, and has been scheduled for
- * removal in OTP-R17. It is replaced by erl_drv_send_term() above.
+ * removal in Erlang/OTP 18. It is replaced by erl_drv_send_term() above.
  */
 int
 driver_send_term(ErlDrvPort drvport,
