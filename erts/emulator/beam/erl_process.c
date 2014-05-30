@@ -590,12 +590,10 @@ erts_pre_init_process(void)
      erts_psd_required_locks[ERTS_PSD_DELAYED_GC_TASK_QS].set_locks
 	 = ERTS_PSD_DELAYED_GC_TASK_QS_SET_LOCKS;
 
-#ifdef ERTS_DIRTY_SCHEDULERS
-     erts_psd_required_locks[ERTS_PSD_DIRTY_SCHED_TRAP_EXPORT].get_locks
-	 = ERTS_PSD_DIRTY_SCHED_TRAP_EXPORT_GET_LOCKS;
-     erts_psd_required_locks[ERTS_PSD_DIRTY_SCHED_TRAP_EXPORT].set_locks
-	 = ERTS_PSD_DIRTY_SCHED_TRAP_EXPORT_SET_LOCKS;
-#endif
+     erts_psd_required_locks[ERTS_PSD_NIF_TRAP_EXPORT].get_locks
+	 = ERTS_PSD_NIF_TRAP_EXPORT_GET_LOCKS;
+     erts_psd_required_locks[ERTS_PSD_NIF_TRAP_EXPORT].set_locks
+	 = ERTS_PSD_NIF_TRAP_EXPORT_SET_LOCKS;
 
      /* Check that we have locks for all entries */
      for (ix = 0; ix < ERTS_PSD_SIZE; ix++) {
