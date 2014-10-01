@@ -19,3 +19,4 @@
 
 /* Dirty scheduler support */
 #undef ERL_NIF_DIRTY_SCHEDULER_SUPPORT
+#undef ERL_DRV_DIRTY_SCHEDULER_SUPPORT

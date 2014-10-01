@@ -59,6 +59,10 @@ typedef enum {
     ERTS_PORT_TASK_TIMEOUT,
     ERTS_PORT_TASK_DIST_CMD,
     ERTS_PORT_TASK_PROC_SIG
+#ifdef ERTS_DIRTY_SCHEDULERS
+    , ERTS_PORT_TASK_DIRTY_CALLBACK,
+    ERTS_PORT_TASK_DIRTY_FINALIZER
+#endif
 } ErtsPortTaskType;
 
 #ifdef ERTS_INCLUDE_SCHEDULER_INTERNALS
@@ -79,6 +83,8 @@ extern erts_smp_atomic_t erts_port_task_outstanding_io_tasks;
 #define ERTS_PTS_FLG_FORCE_SCHED		(((erts_aint32_t) 1) << 10)
 #define ERTS_PTS_FLG_EXITING			(((erts_aint32_t) 1) << 11)
 #define ERTS_PTS_FLG_EXEC_IMM			(((erts_aint32_t) 1) << 12)
+#define ERTS_PTS_FLG_DIRTY_CPU_JOB		(((erts_aint32_t) 1) << 13)
+#define ERTS_PTS_FLG_DIRTY_IO_JOB		(((erts_aint32_t) 1) << 14)
 
 #define ERTS_PTS_FLGS_BUSY \
     (ERTS_PTS_FLG_BUSY_PORT | ERTS_PTS_FLG_BUSY_PORT_Q)

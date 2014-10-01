@@ -82,6 +82,7 @@
 #define HALFWORD_HEAP_EMULATOR HALFWORD_HEAP_EMULATOR_SAVED__
 #endif
 
+#include "erl_native_features_config.h"
 #include "erl_drv_nif.h"
 
 #include <stdlib.h>
@@ -269,6 +270,9 @@ typedef struct {
  * Exception code from open_port/2 will be {'EXIT',{badarg,Where}}.
  */
 #define ERL_DRV_ERROR_BADARG ((ErlDrvData) -3)
+
+#define ERL_DRV_RESCHEDULE_DIRTY ((ErlDrvData) -4)
+#define ERL_DRV_RESCHEDULE_NORMAL ((ErlDrvData) -5)
 
 typedef struct erl_io_vec {
     int vsize;			/* length of vectors */
@@ -571,6 +575,27 @@ EXTERN char* erl_drv_mutex_name(ErlDrvMutex *mtx);
 EXTERN char* erl_drv_cond_name(ErlDrvCond *cnd);
 EXTERN char* erl_drv_rwlock_name(ErlDrvRWLock *rwlck);
 EXTERN char* erl_drv_thread_name(ErlDrvTid tid);
+
+#ifdef ERL_DRV_DIRTY_SCHEDULER_SUPPORT
+/*
+ * Dirty scheduler API
+ */
+typedef ErlDrvSSizeT (*ErlDrvDirtyCallback)(ErlDrvData drv_data, void* arg);
+typedef ErlDrvSSizeT (*ErlDrvDirtyFinalizer)(ErlDrvData drv_data, ErlDrvSSizeT result, void* arg);
+
+EXTERN ErlDrvSSizeT
+erl_drv_schedule_dirty_callback(ErlDrvPort port,
+                               int flags,
+                               ErlDrvDirtyCallback callback,
+                               void* arg);
+EXTERN ErlDrvSSizeT
+erl_drv_schedule_dirty_finalizer(ErlDrvPort port,
+                                ErlDrvDirtyFinalizer finalizer,
+                                ErlDrvSSizeT result,
+                                void* arg);
+EXTERN int erl_drv_have_dirty_schedulers(void);
+EXTERN int erl_drv_callback_is_on_dirty_scheduler(ErlDrvPort port);
+#endif
 
 /*
  * Misc.
