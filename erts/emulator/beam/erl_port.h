@@ -122,9 +122,10 @@ typedef struct line_buf {  /* Buffer used in line oriented I/O */
  * Only use PrtSD for very rarely used data.
  */
 
-#define ERTS_PRTSD_SCHED_ID 0
+#define ERTS_PRTSD_SCHED_ID       0
+#define ERTS_PRTSD_SCHED_CALLBACK 1
 
-#define ERTS_PRTSD_SIZE 1
+#define ERTS_PRTSD_SIZE 2
 
 typedef struct {
     void *data[ERTS_PRTSD_SIZE];

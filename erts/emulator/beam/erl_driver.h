@@ -271,8 +271,21 @@ typedef struct {
  */
 #define ERL_DRV_ERROR_BADARG ((ErlDrvData) -3)
 
-#define ERL_DRV_RESCHEDULE_DIRTY ((ErlDrvData) -4)
-#define ERL_DRV_RESCHEDULE_NORMAL ((ErlDrvData) -5)
+/*
+ * Exception code used to reschedule driver callbacks. This is never
+ * returned to the Erlang caller but is instead used within the runtime.
+ */
+#define ERL_DRV_RESCHEDULE_REGULAR ((ErlDrvSSizeT) -4)
+
+#ifdef ERL_DRV_DIRTY_SCHEDULER_SUPPORT
+/*
+ * Exception codes used to reschedule driver callbacks onto dirty
+ * schedulers. These are never returned to the Erlang caller but are
+ * instead used within the runtime.
+ */
+#define ERL_DRV_RESCHEDULE_DIRTY_CPU ((ErlDrvSSizeT) -5)
+#define ERL_DRV_RESCHEDULE_DIRTY_IO ((ErlDrvSSizeT) -6)
+#endif
 
 typedef struct erl_io_vec {
     int vsize;			/* length of vectors */
@@ -576,24 +589,17 @@ EXTERN char* erl_drv_cond_name(ErlDrvCond *cnd);
 EXTERN char* erl_drv_rwlock_name(ErlDrvRWLock *rwlck);
 EXTERN char* erl_drv_thread_name(ErlDrvTid tid);
 
+typedef ErlDrvSSizeT (*ErlDrvCallback)(ErlDrvData drv_data, void* arg);
+
+EXTERN ErlDrvSSizeT
+erl_drv_schedule_callback(ErlDrvPort port,
+			  int flags,
+			  ErlDrvCallback callback,
+			  void* arg);
 #ifdef ERL_DRV_DIRTY_SCHEDULER_SUPPORT
 /*
  * Dirty scheduler API
  */
-typedef ErlDrvSSizeT (*ErlDrvDirtyCallback)(ErlDrvData drv_data, void* arg);
-typedef ErlDrvSSizeT (*ErlDrvDirtyFinalizer)(ErlDrvData drv_data, ErlDrvSSizeT result, void* arg);
-
-EXTERN ErlDrvSSizeT
-erl_drv_schedule_dirty_callback(ErlDrvPort port,
-                               int flags,
-                               ErlDrvDirtyCallback callback,
-                               void* arg);
-EXTERN ErlDrvSSizeT
-erl_drv_schedule_dirty_finalizer(ErlDrvPort port,
-                                ErlDrvDirtyFinalizer finalizer,
-                                ErlDrvSSizeT result,
-                                void* arg);
-EXTERN int erl_drv_have_dirty_schedulers(void);
 EXTERN int erl_drv_callback_is_on_dirty_scheduler(ErlDrvPort port);
 #endif
 

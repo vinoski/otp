@@ -3805,8 +3805,18 @@ call_driver_control(Eterm caller,
 				 *from_size);
     prt->caller = NIL;
 
-    if (cres < 0)
-	return ERTS_PORT_OP_BADARG;
+    if (cres < 0) {
+	switch (cres) {
+#ifdef ERTS_DIRTY_SCHEDULERS
+	case ERL_DRV_RESCHEDULE_DIRTY_CPU:
+	case ERL_DRV_RESCHEDULE_DIRTY_IO:
+	case ERL_DRV_RESCHEDULE_REGULAR:
+	    break;
+#endif
+	default:
+	    return ERTS_PORT_OP_BADARG;
+	}
+    }
 
     *from_size = (ErlDrvSizeT) cres;
 
@@ -4209,8 +4219,19 @@ call_driver_call(Eterm caller,
 			      ret_flagsp);
     prt->caller = NIL;
 
-    if (cres <= 0
-	|| ((byte) (*resp_bufp)[0]) != VERSION_MAGIC)
+    if (cres <= 0) {
+	switch (cres) {
+#ifdef ERTS_DIRTY_SCHEDULERS
+	case ERL_DRV_RESCHEDULE_DIRTY_CPU:
+	case ERL_DRV_RESCHEDULE_DIRTY_IO:
+	case ERL_DRV_RESCHEDULE_REGULAR:
+	    break;
+#endif
+	default:
+	    return ERTS_PORT_OP_BADARG;
+	}
+    }
+    if (((byte) (*resp_bufp)[0]) != VERSION_MAGIC)
 	return ERTS_PORT_OP_BADARG;
 
     *from_size = (ErlDrvSizeT) cres;
