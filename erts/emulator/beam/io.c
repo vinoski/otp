@@ -1556,6 +1556,16 @@ erts_schedule_proc2port_signal(Process *c_p,
 	    *refp = NIL;
 	return ERTS_PORT_OP_DROPPED;
     }
+#ifdef ERL_DRV_CALLBACK_SCHEDULING
+    if (sigdp->flags & ERTS_P2P_SIG_DATA_FLG_RESCHED)
+	return ERTS_PORT_OP_RESCHED_REGULAR;
+#endif
+#ifdef ERTS_DIRTY_SCHEDULERS
+    if (sigdp->flags & ERTS_P2P_SIG_DATA_FLG_RESCHED_DIRTY_CPU)
+	return ERTS_PORT_OP_RESCHED_DIRTY_CPU;
+    else if (sigdp->flags & ERTS_P2P_SIG_DATA_FLG_RESCHED_DIRTY_IO)
+	return ERTS_PORT_OP_RESCHED_DIRTY_IO;
+#endif
     return ERTS_PORT_OP_SCHEDULED;
 }
 
@@ -3809,9 +3819,13 @@ call_driver_control(Eterm caller,
 	switch (cres) {
 #ifdef ERTS_DIRTY_SCHEDULERS
 	case ERL_DRV_RESCHEDULE_DIRTY_CPU:
+	    return ERTS_PORT_OP_RESCHED_DIRTY_CPU;
 	case ERL_DRV_RESCHEDULE_DIRTY_IO:
+	    return ERTS_PORT_OP_RESCHED_DIRTY_IO;
+#endif
+#ifdef ERL_DRV_CALLBACK_SCHEDULING
 	case ERL_DRV_RESCHEDULE_REGULAR:
-	    break;
+	    return ERTS_PORT_OP_RESCHED_REGULAR;
 #endif
 	default:
 	    return ERTS_PORT_OP_BADARG;
@@ -4009,7 +4023,7 @@ erts_port_control(Process* c_p,
 		  Eterm data,
 		  Eterm *retvalp)
 {
-    ErtsPortOpResult res;
+    ErtsPortOpResult res = ERTS_PORT_OP_SCHEDULED;
     char *bufp = NULL;
     ErlDrvSizeT size = 0;
     int try_call;
@@ -4098,10 +4112,24 @@ erts_port_control(Process* c_p,
 				      &resp_bufp,
 				      &resp_size);
 	    finalize_imm_drv_call(&try_call_state);
-	    if (tmp_alloced)
-		erts_free(ERTS_ALC_T_TMP, bufp);
-	    if (res == ERTS_PORT_OP_BADARG) {
+	    switch (res) {
+	    case ERTS_PORT_OP_BADARG:
+		if (tmp_alloced)
+		    erts_free(ERTS_ALC_T_TMP, bufp);
 		return ERTS_PORT_OP_BADARG;
+#ifdef ERTS_DIRTY_SCHEDULERS
+	    case ERTS_PORT_OP_RESCHED_DIRTY_CPU:
+	    case ERTS_PORT_OP_RESCHED_DIRTY_IO:
+		goto reschedule;
+#endif
+#ifdef ERL_DRV_CALLBACK_SCHEDULING
+	    case ERTS_PORT_OP_RESCHED_REGULAR:
+		goto reschedule;
+#endif
+	    default:
+		if (tmp_alloced)
+		    erts_free(ERTS_ALC_T_TMP, bufp);
+		break;
 	    }
 
 	    control_flags = prt->control_flags;
@@ -4131,6 +4159,7 @@ erts_port_control(Process* c_p,
 	}
     }
 
+ reschedule:
     /* Convert data into something that can be scheduled */
 
     copy = tmp_alloced;
@@ -4163,6 +4192,23 @@ erts_port_control(Process* c_p,
 
     sigdp = erts_port_task_alloc_p2p_sig_data();
     sigdp->flags = ERTS_P2P_SIG_TYPE_CONTROL;
+#ifdef ERTS_DIRTY_SCHEDULERS
+    switch (res) {
+    case ERTS_PORT_OP_RESCHED_DIRTY_CPU:
+	sigdp->flags |= ERTS_P2P_SIG_DATA_FLG_RESCHED_DIRTY_CPU;
+	break;
+    case ERTS_PORT_OP_RESCHED_DIRTY_IO:
+	sigdp->flags |= ERTS_P2P_SIG_DATA_FLG_RESCHED_DIRTY_IO;
+	break;
+#endif
+#ifdef ERL_DRV_CALLBACK_SCHEDULING
+    case ERTS_PORT_OP_RESCHED_REGULAR:
+	sigdp->flags |= ERTS_P2P_SIG_DATA_FLG_RESCHED;
+	break;
+#endif
+    default:
+	break;
+    }
     sigdp->u.control.binp = binp;
     sigdp->u.control.command = command;
     sigdp->u.control.bufp = bufp;
@@ -4176,11 +4222,20 @@ erts_port_control(Process* c_p,
 					 0,
 					 NULL,
 					 port_sig_control);
-    if (res != ERTS_PORT_OP_SCHEDULED) {
+    switch (res) {
+    case ERTS_PORT_OP_SCHEDULED:
+#ifdef ERTS_DIRTY_SCHEDULERS
+    case ERTS_PORT_OP_RESCHED_DIRTY_CPU:
+    case ERTS_PORT_OP_RESCHED_DIRTY_IO:
+#endif
+#ifdef ERL_DRV_CALLBACK_SCHEDULING
+    case ERTS_PORT_OP_RESCHED_REGULAR:
+#endif
+	return res;
+    default:
 	cleanup_scheduled_control(binp, bufp);
 	return ERTS_PORT_OP_BADARG;
     }
-    return res;
 }
 
 static ERTS_INLINE ErtsPortOpResult

@@ -271,6 +271,17 @@ BIF_RETTYPE erts_internal_port_control_3(BIF_ALIST_3)
     case ERTS_PORT_OP_DONE:
 	ASSERT(is_not_internal_ref(retval));
 	break;
+#ifdef ERTS_DIRTY_SCHEDULERS
+    case ERTS_PORT_OP_RESCHED_DIRTY_CPU:
+    case ERTS_PORT_OP_RESCHED_DIRTY_IO:
+	ASSERT(is_internal_ref(retval));
+	break;
+#endif
+#ifdef ERL_DRV_CALLBACK_SCHEDULING
+    case ERTS_PORT_OP_RESCHED_REGULAR:
+	ASSERT(is_internal_ref(retval));
+	break;
+#endif
     default:
 	ERTS_INTERNAL_ERROR("Unexpected erts_port_control() result");
 	retval = am_internal_error;

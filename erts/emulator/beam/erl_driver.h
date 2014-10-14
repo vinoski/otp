@@ -85,6 +85,10 @@
 #include "erl_native_features_config.h"
 #include "erl_drv_nif.h"
 
+#ifdef ERL_DRV_DIRTY_SCHEDULER_SUPPORT
+#define ERL_DRV_CALLBACK_SCHEDULING
+#endif
+
 #include <stdlib.h>
 #include <sys/types.h>	/* ssize_t */
 
@@ -134,7 +138,7 @@ typedef struct {
 
 #define ERL_DRV_EXTENDED_MARKER		(0xfeeeeeed)
 #define ERL_DRV_EXTENDED_MAJOR_VERSION	3
-#define ERL_DRV_EXTENDED_MINOR_VERSION	1
+#define ERL_DRV_EXTENDED_MINOR_VERSION	2
 
 /*
  * The emulator will refuse to load a driver with a major version
@@ -271,11 +275,13 @@ typedef struct {
  */
 #define ERL_DRV_ERROR_BADARG ((ErlDrvData) -3)
 
+#ifdef ERL_DRV_CALLBACK_SCHEDULING
 /*
  * Exception code used to reschedule driver callbacks. This is never
  * returned to the Erlang caller but is instead used within the runtime.
  */
 #define ERL_DRV_RESCHEDULE_REGULAR ((ErlDrvSSizeT) -4)
+#endif
 
 #ifdef ERL_DRV_DIRTY_SCHEDULER_SUPPORT
 /*
@@ -589,6 +595,7 @@ EXTERN char* erl_drv_cond_name(ErlDrvCond *cnd);
 EXTERN char* erl_drv_rwlock_name(ErlDrvRWLock *rwlck);
 EXTERN char* erl_drv_thread_name(ErlDrvTid tid);
 
+#ifdef ERL_DRV_CALLBACK_SCHEDULING
 typedef ErlDrvSSizeT (*ErlDrvCallback)(ErlDrvData drv_data, void* arg);
 
 EXTERN ErlDrvSSizeT
@@ -596,6 +603,7 @@ erl_drv_schedule_callback(ErlDrvPort port,
 			  int flags,
 			  ErlDrvCallback callback,
 			  void* arg);
+#endif
 #ifdef ERL_DRV_DIRTY_SCHEDULER_SUPPORT
 /*
  * Dirty scheduler API
