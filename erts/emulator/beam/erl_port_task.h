@@ -82,9 +82,10 @@ extern erts_smp_atomic_t erts_port_task_outstanding_io_tasks;
 #define ERTS_PTS_FLG_FORCE_SCHED		(((erts_aint32_t) 1) << 10)
 #define ERTS_PTS_FLG_EXITING			(((erts_aint32_t) 1) << 11)
 #define ERTS_PTS_FLG_EXEC_IMM			(((erts_aint32_t) 1) << 12)
-#if defined(ERTS_DIRTY_SCHEDULERS) && defined(ERTS_SMP)
+#ifdef ERTS_DIRTY_SCHEDULERS
 #define ERTS_PTS_FLG_DIRTY_CPU_JOB		(((erts_aint32_t) 1) << 13)
 #define ERTS_PTS_FLG_DIRTY_IO_JOB		(((erts_aint32_t) 1) << 14)
+#define ERTS_PTS_FLG_RESCHED			(((erts_aint32_t) 1) << 15)
 
 #define ERTS_PTS_FLGS_DIRTY \
     (ERTS_PTS_FLG_DIRTY_CPU_JOB | ERTS_PTS_FLG_DIRTY_IO_JOB)

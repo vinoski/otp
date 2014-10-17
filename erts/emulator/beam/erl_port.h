@@ -123,9 +123,18 @@ typedef struct line_buf {  /* Buffer used in line oriented I/O */
  */
 
 #define ERTS_PRTSD_SCHED_ID       0
+#ifdef ERL_DRV_CALLBACK_SCHEDULING
 #define ERTS_PRTSD_SCHED_CALLBACK 1
 
 #define ERTS_PRTSD_SIZE 2
+
+typedef struct {
+    ErlDrvCallback cb;
+    void* arg;
+} ErtsPrtSDCallback;
+#else
+#define ERTS_PRTSD_SIZE 1
+#endif
 
 typedef struct {
     void *data[ERTS_PRTSD_SIZE];
@@ -929,7 +938,7 @@ typedef enum {
     ERTS_PORT_OP_RESCHED_DIRTY_IO
 #endif
 #ifdef ERL_DRV_CALLBACK_SCHEDULING
-    , ERTS_PORT_OP_RESCHED_REGULAR
+    , ERTS_PORT_OP_RESCHED
 #endif
 } ErtsPortOpResult;
 

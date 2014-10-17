@@ -898,13 +898,8 @@ ERTS_GLB_INLINE Process *erts_pix2proc(int ix)
 ERTS_GLB_INLINE Process *erts_proc_lookup_raw(Eterm pid)
 {
     Process *proc;
-#if defined(ERTS_DIRTY_SCHEDULERS) && defined(ERTS_SMP)
-    ErtsSchedulerData *esdp = erts_get_scheduler_data();
-    if (ERTS_SCHEDULER_IS_DIRTY(esdp))
-	erts_pid2proc_opt(NULL, 0, pid, 0, 0);
-    else
-#endif
-	ERTS_SMP_LC_ASSERT(erts_thr_progress_lc_is_delaying());
+
+    ERTS_SMP_LC_ASSERT(erts_thr_progress_lc_is_delaying());
 
     if (is_not_internal_pid(pid))
 	return NULL;

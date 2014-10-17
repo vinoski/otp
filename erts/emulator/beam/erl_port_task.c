@@ -94,7 +94,6 @@ typedef union {
     struct {
 	ErlDrvCallback callback;
 	void* arg;
-	int dirty;
     } cb;
 } ErtsPortTaskTypeData;
 
@@ -1266,28 +1265,49 @@ erl_drv_consume_timeslice(ErlDrvPort dprt, int percent)
 ErlDrvSSizeT
 erl_drv_schedule_callback(ErlDrvPort dprt, int flags, ErlDrvCallback cb, void* arg)
 {
-    int chkflgs;
-    Port *pp = erts_drvport2port(dprt);
+    int chk;
+    ErlDrvSSizeT result = (ErlDrvSSizeT) ERL_DRV_RESCHEDULE;
+    erts_aint32_t newflgs = ERTS_PTS_FLG_RESCHED;
+    ErtsPrtSDCallback* prtsd;
+    Port *pp;
+
+    pp = erts_drvport2port(dprt);
     if (pp == ERTS_INVALID_ERL_DRV_PORT || cb == NULL)
 	return (ErlDrvSSizeT) ERL_DRV_ERROR_BADARG;
 #ifndef ERTS_DIRTY_SCHEDULERS
     if (flags)
 	return (ErlDrvSSizeT) ERL_DRV_ERROR_BADARG;
 #else
-    chkflgs = (flags & (ERL_DRV_DIRTY_JOB_CPU_BOUND|ERL_DRV_DIRTY_JOB_IO_BOUND));
-    if (chkflgs != ERL_DRV_DIRTY_JOB_CPU_BOUND && chkflgs != ERL_DRV_DIRTY_JOB_IO_BOUND)
+    chk = (flags & (ERL_DRV_DIRTY_JOB_CPU_BOUND|ERL_DRV_DIRTY_JOB_IO_BOUND));
+    if (chk && chk != ERL_DRV_DIRTY_JOB_CPU_BOUND && chk != ERL_DRV_DIRTY_JOB_IO_BOUND)
 	return (ErlDrvSSizeT) ERL_DRV_ERROR_BADARG;
+    switch (chk) {
+    case ERL_DRV_DIRTY_JOB_CPU_BOUND:
+	newflgs |= ERTS_PTS_FLG_DIRTY_CPU_JOB;
+	result = (ErlDrvSSizeT) ERL_DRV_RESCHEDULE_DIRTY_CPU;
+	break;
+    case ERL_DRV_DIRTY_JOB_IO_BOUND:
+	newflgs |= ERTS_PTS_FLG_DIRTY_IO_JOB;
+	result = (ErlDrvSSizeT) ERL_DRV_RESCHEDULE_DIRTY_IO;
+	break;
+    case 0:
+	/* do nothing */
+	break;
+    default:
+	return (ErlDrvSSizeT) ERL_DRV_ERROR_BADARG;
+    }
 #endif
-    erts_port_task_schedule(pp->common.id, NULL, ERTS_PORT_TASK_CALLBACK, cb, arg, chkflgs);
-#ifndef ERTS_DIRTY_SCHEDULERS
-    return ERL_DRV_RESCHEDULE_REGULAR;
-#else
-    if (!flags)
-	return ERL_DRV_RESCHEDULE_REGULAR;
-    else
-	return chkflgs == ERL_DRV_DIRTY_JOB_CPU_BOUND ?
-	    ERL_DRV_RESCHEDULE_DIRTY_CPU : ERL_DRV_RESCHEDULE_DIRTY_IO;
-#endif
+    erts_smp_atomic32_read_bor_nob(&pp->sched.flags, newflgs);
+
+    prtsd = (ErtsPrtSDCallback*) erts_prtsd_get(pp, ERTS_PRTSD_SCHED_CALLBACK);
+    if (!prtsd) {
+	prtsd = erts_alloc(ERTS_ALC_T_PRTSD, sizeof(ErtsPrtSDCallback));
+	erts_prtsd_set(pp, ERTS_PRTSD_SCHED_CALLBACK, prtsd);
+    }
+    prtsd->cb = cb;
+    prtsd->arg = arg;
+
+    return result;
 }
 #endif
 
@@ -1589,23 +1609,18 @@ erts_port_task_schedule(Eterm id,
 	flags = va_arg(argp, int);
 	ptp->u.alive.td.cb.callback = cb;
 	ptp->u.alive.td.cb.arg = arg;
-#if 0
 #if defined(ERTS_DIRTY_SCHEDULERS) && defined(ERTS_SMP)
 	if (flags & ERL_DRV_DIRTY_JOB_CPU_BOUND) {
 	    add_flags |= ERTS_PTS_FLG_DIRTY_CPU_JOB;
 	    rm_flags |= ERTS_PTS_FLG_DIRTY_IO_JOB;
 	    runq = ERTS_DIRTY_CPU_RUNQ;
-	    ptp->u.alive.td.cb.dirty = 1;
 	} else if (flags & ERL_DRV_DIRTY_JOB_IO_BOUND) {
 	    add_flags |= ERTS_PTS_FLG_DIRTY_IO_JOB;
 	    rm_flags |= ERTS_PTS_FLG_DIRTY_CPU_JOB;
 	    runq = ERTS_DIRTY_IO_RUNQ;
-	    ptp->u.alive.td.cb.dirty = 1;
 	} else {
 	    rm_flags |= (ERTS_PTS_FLG_DIRTY_CPU_JOB|ERTS_PTS_FLG_DIRTY_IO_JOB);
-	    ptp->u.alive.td.cb.dirty = 0;
 	}
-#endif
 #endif
 	add_flags |= ERTS_PTS_FLG_IN_RUNQ;
 	queue_at_front = 1;
@@ -1854,21 +1869,6 @@ erts_port_task_execute(ErtsRunQueue *runq, Port **curr_port_pp)
 	ptp = select_task_for_exec(pp, &execq, &processing_busy_q);
 	if (!ptp)
 	    break;
-#if 0
-#if defined(ERTS_DIRTY_SCHEDULERS) && defined(ERTS_SMP)
-	if ((ptp->type != ERTS_PORT_TASK_CALLBACK && ERTS_RUNQ_IX_IS_DIRTY(runq->ix))
-	    || (ptp->type == ERTS_PORT_TASK_CALLBACK && !ERTS_RUNQ_IX_IS_DIRTY(runq->ix)
-		&& ptp->u.alive.td.cb.dirty)) {
-	    erts_aint32_t act;
-	    enqueue_task(pp, ptp, NULL, NULL, &act, 1);
-	    erts_unblock_fpe(fpe_was_unmasked);
-	    erts_port_release(pp);
-	    erts_smp_runq_lock(runq);
-	    return (erts_smp_atomic_read_nob(&erts_port_task_outstanding_io_tasks)
-		    != (erts_aint_t) 0);
-        }
-#endif
-#endif
 
 	task_state = erts_smp_atomic32_cmpxchg_nob(&ptp->state,
 						   ERTS_PT_STATE_EXECUTING,
@@ -1948,7 +1948,7 @@ erts_port_task_execute(ErtsRunQueue *runq, Port **curr_port_pp)
 	    reset_handle(ptp);
 	    reds = erts_dist_command(pp, CONTEXT_REDS - pp->reds);
 	    break;
-#if defined(ERL_DRV_CALLBACK_SCHEDULING) && defined(ERTS_DIRTY_SCHEDULERS)
+#if defined(ERL_DRV_CALLBACK_SCHEDULING) || defined(ERTS_DIRTY_SCHEDULERS)
 	case ERTS_PORT_TASK_CALLBACK: {
 	    ASSERT((state & ERTS_PORT_SFLGS_DEAD) == 0);
 	    /* TODO: need 3 callback variants: control, call, and general callbacks */

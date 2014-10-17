@@ -280,7 +280,7 @@ typedef struct {
  * Exception code used to reschedule driver callbacks. This is never
  * returned to the Erlang caller but is instead used within the runtime.
  */
-#define ERL_DRV_RESCHEDULE_REGULAR ((ErlDrvSSizeT) -4)
+#define ERL_DRV_RESCHEDULE ((ErlDrvSSizeT) -4)
 #endif
 
 #ifdef ERL_DRV_DIRTY_SCHEDULER_SUPPORT
@@ -598,11 +598,10 @@ EXTERN char* erl_drv_thread_name(ErlDrvTid tid);
 #ifdef ERL_DRV_CALLBACK_SCHEDULING
 typedef ErlDrvSSizeT (*ErlDrvCallback)(ErlDrvData drv_data, void* arg);
 
-EXTERN ErlDrvSSizeT
-erl_drv_schedule_callback(ErlDrvPort port,
-			  int flags,
-			  ErlDrvCallback callback,
-			  void* arg);
+EXTERN ErlDrvSSizeT erl_drv_schedule_callback(ErlDrvPort port,
+					      int flags,
+					      ErlDrvCallback callback,
+					      void* arg);
 #endif
 #ifdef ERL_DRV_DIRTY_SCHEDULER_SUPPORT
 /*
