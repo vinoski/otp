@@ -1325,9 +1325,9 @@ extern struct erts_system_profile_flags_t erts_system_profile_flags;
 #define ERTS_SCHEDULER_IS_DIRTY(ESDP)					\
   ((ESDP)->dirty_no.s.num != 0)
 #define ERTS_SCHEDULER_IS_DIRTY_CPU(ESDP)				\
-    ((ESDP)->dirty_no.s.type == 0)
+    (ERTS_SCHEDULER_IS_DIRTY(ESDP) && ((ESDP)->dirty_no.s.type == 0))
 #define ERTS_SCHEDULER_IS_DIRTY_IO(ESDP)				\
-    ((ESDP)->dirty_no.s.type == 1)
+    (ERTS_SCHEDULER_IS_DIRTY(ESDP) && ((ESDP)->dirty_no.s.type == 1))
 #else
 #define ERTS_SCHEDULER_IS_DIRTY(ESDP) 0
 #define ERTS_SCHEDULER_IS_DIRTY_CPU(ESDP) 0

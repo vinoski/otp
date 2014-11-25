@@ -407,9 +407,7 @@ erts_smp_port_trylock(Port *prt)
 {
 #ifdef ERTS_SMP
     /* *Need* to be a managed thread */
-#ifndef ERTS_DIRTY_SCHEDULERS
     ERTS_SMP_LC_ASSERT(erts_thr_progress_is_managed_thread());
-#endif
     return erts_mtx_trylock(prt->lock);
 #else
     return 0;
@@ -421,9 +419,7 @@ erts_smp_port_lock(Port *prt)
 {
 #ifdef ERTS_SMP
     /* *Need* to be a managed thread */
-#ifndef ERTS_DIRTY_SCHEDULERS
     ERTS_SMP_LC_ASSERT(erts_thr_progress_is_managed_thread());
-#endif
     erts_mtx_lock(prt->lock);
 #endif
 }
@@ -433,9 +429,7 @@ erts_smp_port_unlock(Port *prt)
 {
 #ifdef ERTS_SMP
     /* *Need* to be a managed thread */
-#ifndef ERTS_DIRTY_SCHEDULERS
     ERTS_SMP_LC_ASSERT(erts_thr_progress_is_managed_thread());
-#endif
     erts_mtx_unlock(prt->lock);
 #endif
 }

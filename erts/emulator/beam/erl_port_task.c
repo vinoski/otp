@@ -1129,13 +1129,16 @@ check_task_for_exec(Port *pp,
 		    int *processing_busy_q_p,
 		    ErtsPortTask *ptp)
 {
+/*
+ * TODO: check Rickard's last email, something about busy queues there
+ */
 #if defined(ERTS_DIRTY_SCHEDULERS) && defined(ERTS_SMP)
     ErtsSchedulerData *esdp = erts_get_scheduler_data();
-    if (((flags & ERTS_PTS_FLG_DIRTY_CPU_JOB) &&
-	 !ERTS_SCHEDULER_IS_DIRTY_CPU(esdp)) ||
-	((flags & ERTS_PTS_FLG_DIRTY_IO_JOB) &&
-	 !ERTS_SCHEDULER_IS_DIRTY_IO(esdp)) ||
-	(!(flags & ERTS_PTS_FLGS_DIRTY) && ERTS_SCHEDULER_IS_DIRTY(esdp)))
+    int dirty_flgs = (ptp->u.alive.flags & ERTS_PT_FLGS_DIRTY);
+    if (!dirty_flgs && ERTS_SCHEDULER_IS_DIRTY(esdp))
+	return 0;
+    if (((dirty_flgs == ERTS_PT_FLG_DIRTY_CPU_JOB) && !ERTS_SCHEDULER_IS_DIRTY_CPU(esdp)) ||
+	((dirty_flgs == ERTS_PT_FLG_DIRTY_IO_JOB) && !ERTS_SCHEDULER_IS_DIRTY_IO(esdp)))
 	return 0;
 #endif
 
@@ -1260,16 +1263,16 @@ erl_drv_consume_timeslice(ErlDrvPort dprt, int percent)
 
 #ifdef ERL_DRV_CALLBACK_SCHEDULING
 /*
- * Schedule a callback
+ * Schedule a generic callback
  */
 ErlDrvSSizeT
 erl_drv_schedule_callback(ErlDrvPort dprt, int flags, ErlDrvCallback cb, void* arg)
 {
-    int chk;
-    ErlDrvSSizeT result = (ErlDrvSSizeT) ERL_DRV_RESCHEDULE;
-    erts_aint32_t newflgs = ERTS_PTS_FLG_RESCHED;
+#if 0
     ErtsPrtSDCallback* prtsd;
+#endif
     Port *pp;
+    ErlDrvSSizeT result;
 
     pp = erts_drvport2port(dprt);
     if (pp == ERTS_INVALID_ERL_DRV_PORT || cb == NULL)
@@ -1278,27 +1281,29 @@ erl_drv_schedule_callback(ErlDrvPort dprt, int flags, ErlDrvCallback cb, void* a
     if (flags)
 	return (ErlDrvSSizeT) ERL_DRV_ERROR_BADARG;
 #else
-    chk = (flags & (ERL_DRV_DIRTY_JOB_CPU_BOUND|ERL_DRV_DIRTY_JOB_IO_BOUND));
-    if (chk && chk != ERL_DRV_DIRTY_JOB_CPU_BOUND && chk != ERL_DRV_DIRTY_JOB_IO_BOUND)
-	return (ErlDrvSSizeT) ERL_DRV_ERROR_BADARG;
-    switch (chk) {
-    case ERL_DRV_DIRTY_JOB_CPU_BOUND:
-	newflgs |= ERTS_PTS_FLG_DIRTY_CPU_JOB;
-	result = (ErlDrvSSizeT) ERL_DRV_RESCHEDULE_DIRTY_CPU;
-	break;
-    case ERL_DRV_DIRTY_JOB_IO_BOUND:
-	newflgs |= ERTS_PTS_FLG_DIRTY_IO_JOB;
-	result = (ErlDrvSSizeT) ERL_DRV_RESCHEDULE_DIRTY_IO;
-	break;
-    case 0:
-	/* do nothing */
-	break;
-    default:
-	return (ErlDrvSSizeT) ERL_DRV_ERROR_BADARG;
+    {
+	int chk = (flags & (ERL_DRV_DIRTY_JOB_CPU_BOUND|ERL_DRV_DIRTY_JOB_IO_BOUND));
+	if (chk && chk != ERL_DRV_DIRTY_JOB_CPU_BOUND && chk != ERL_DRV_DIRTY_JOB_IO_BOUND)
+	    return (ErlDrvSSizeT) ERL_DRV_ERROR_BADARG;
+	switch (chk) {
+	case ERL_DRV_DIRTY_JOB_CPU_BOUND:
+	    result = (ErlDrvSSizeT) ERL_DRV_RESCHEDULE_DIRTY_CPU;
+	    break;
+	case ERL_DRV_DIRTY_JOB_IO_BOUND:
+	    result = (ErlDrvSSizeT) ERL_DRV_RESCHEDULE_DIRTY_IO;
+	    break;
+	case 0:
+	    result = (ErlDrvSSizeT) ERL_DRV_RESCHEDULE;
+	    break;
+	default:
+	    return (ErlDrvSSizeT) ERL_DRV_ERROR_BADARG;
+	}
     }
 #endif
-    erts_smp_atomic32_read_bor_nob(&pp->sched.flags, newflgs);
+    if (erts_port_task_schedule(pp->common.id, NULL, ERTS_PORT_TASK_CALLBACK, cb, arg, flags) < 0)
+	return (ErlDrvSSizeT) ERL_DRV_ERROR_BADARG;
 
+#if 0
     prtsd = (ErtsPrtSDCallback*) erts_prtsd_get(pp, ERTS_PRTSD_SCHED_CALLBACK);
     if (!prtsd) {
 	prtsd = erts_alloc(ERTS_ALC_T_PRTSD, sizeof(ErtsPrtSDCallback));
@@ -1306,6 +1311,7 @@ erl_drv_schedule_callback(ErlDrvPort dprt, int flags, ErlDrvCallback cb, void* a
     }
     prtsd->cb = cb;
     prtsd->arg = arg;
+#endif
 
     return result;
 }
@@ -1318,7 +1324,7 @@ erl_drv_callback_is_on_dirty_scheduler(ErlDrvPort dprt)
     ErtsSchedulerData *esdp;
     Port *pp = erts_drvport2port(dprt);
     if (pp == ERTS_INVALID_ERL_DRV_PORT)
-       return (int) ERL_DRV_ERROR_BADARG;
+	return (int) (UWord) ERL_DRV_ERROR_BADARG;
     esdp = erts_get_scheduler_data();
     return ERTS_SCHEDULER_IS_DIRTY(esdp);
 }
@@ -1567,13 +1573,16 @@ erts_port_task_schedule(Eterm id,
 				  sizeof(ErtsPortTaskHandleList));
 	    set_handle(ptp, &ns_pthlp->handle);
 	}
+#if 0
 #if defined(ERL_DRV_CALLBACK_SCHEDULING) && defined(ERTS_SMP)
 	if (sigdp->flags & ERTS_P2P_SIG_DATA_FLG_RESCHED) {
+	    erts_smp_atomic32_init_nob(&ptp->state, ERTS_PT_STATE_SCHEDULED);
 	    rm_flags |= (ERTS_PTS_FLG_DIRTY_CPU_JOB|ERTS_PTS_FLG_DIRTY_IO_JOB);
 	    runq = erts_port_runq(pp);
 	    if (ERTS_RUNQ_IX_IS_DIRTY(runq->ix)) {
 		/* TODO: how to flip back to a regular run queue?
-		 * TODO: for now just use run queue 0 */
+		 * TODO: for now just use run queue 0
+		 * TODO: check Rickard's email for right way to do this */
 		erts_smp_atomic_set_nob(&pp->run_queue, (erts_aint_t) ERTS_RUNQ_IX(0));
 	    }
 	    erts_smp_runq_unlock(runq);
@@ -1582,18 +1591,21 @@ erts_port_task_schedule(Eterm id,
 #endif
 #if defined(ERTS_DIRTY_SCHEDULERS) && defined(ERTS_SMP)
 	if (sigdp->flags & ERTS_P2P_SIG_DATA_FLG_RESCHED_DIRTY_CPU) {
+	    erts_smp_atomic32_init_nob(&ptp->state, ERTS_PT_STATE_SCHEDULED);
 	    add_flags |= ERTS_PTS_FLG_DIRTY_CPU_JOB;
 	    rm_flags |= ERTS_PTS_FLG_DIRTY_IO_JOB;
 	    runq = ERTS_DIRTY_CPU_RUNQ;
 	    erts_smp_runq_lock(runq);
 	    queue_at_front = 1;
 	} else if (sigdp->flags & ERTS_P2P_SIG_DATA_FLG_RESCHED_DIRTY_IO) {
+	    erts_smp_atomic32_init_nob(&ptp->state, ERTS_PT_STATE_SCHEDULED);
 	    add_flags |= ERTS_PTS_FLG_DIRTY_IO_JOB;
 	    rm_flags |= ERTS_PTS_FLG_DIRTY_CPU_JOB;
 	    runq = ERTS_DIRTY_IO_RUNQ;
 	    erts_smp_runq_lock(runq);
 	    queue_at_front = 1;
 	}
+#endif
 #endif
 	break;
     }
@@ -1611,18 +1623,16 @@ erts_port_task_schedule(Eterm id,
 	ptp->u.alive.td.cb.arg = arg;
 #if defined(ERTS_DIRTY_SCHEDULERS) && defined(ERTS_SMP)
 	if (flags & ERL_DRV_DIRTY_JOB_CPU_BOUND) {
-	    add_flags |= ERTS_PTS_FLG_DIRTY_CPU_JOB;
-	    rm_flags |= ERTS_PTS_FLG_DIRTY_IO_JOB;
+	    ptp->u.alive.flags |= ERTS_PT_FLG_DIRTY_CPU_JOB;
 	    runq = ERTS_DIRTY_CPU_RUNQ;
+	    erts_smp_runq_lock(runq);
 	} else if (flags & ERL_DRV_DIRTY_JOB_IO_BOUND) {
-	    add_flags |= ERTS_PTS_FLG_DIRTY_IO_JOB;
-	    rm_flags |= ERTS_PTS_FLG_DIRTY_CPU_JOB;
+	    ptp->u.alive.flags |= ERTS_PT_FLG_DIRTY_IO_JOB;
 	    runq = ERTS_DIRTY_IO_RUNQ;
-	} else {
-	    rm_flags |= (ERTS_PTS_FLG_DIRTY_CPU_JOB|ERTS_PTS_FLG_DIRTY_IO_JOB);
+	    erts_smp_runq_lock(runq);
 	}
 #endif
-	add_flags |= ERTS_PTS_FLG_IN_RUNQ;
+/*	add_flags |= ERTS_PTS_FLG_IN_RUNQ;*/
 	queue_at_front = 1;
 	break;
     }
@@ -1653,8 +1663,15 @@ erts_port_task_schedule(Eterm id,
 #ifdef ERTS_DIRTY_SCHEDULERS
 	    && !rm_flags
 #endif
-	    && (act & (ERTS_PTS_FLG_IN_RUNQ|ERTS_PTS_FLG_EXEC)))
+	    && (act & (ERTS_PTS_FLG_IN_RUNQ|ERTS_PTS_FLG_EXEC))) {
+#ifdef ERTS_DIRTY_SCHEDULERS
+	    if (runq == ERTS_DIRTY_CPU_RUNQ || runq == ERTS_DIRTY_IO_RUNQ) {
+		erts_smp_runq_unlock(runq);
+		erts_smp_notify_inc_runq(runq);
+	    }
+#endif
 	    goto done; /* Done */
+	}
 
 	new = exp = act;
 	new |= add_flags;
@@ -1667,18 +1684,33 @@ erts_port_task_schedule(Eterm id,
 	act = erts_smp_atomic32_cmpxchg_relb(&pp->sched.flags, new, exp);
 
 	if (exp == act) {
+#if 0
 #if defined(ERTS_DIRTY_SCHEDULERS) && defined(ERTS_SMP)
 	    if (add_flags & (ERTS_PTS_FLG_DIRTY_CPU_JOB|ERTS_PTS_FLG_DIRTY_IO_JOB))
 		break; /* need to enqueue on or off dirty runq */
 	    else
 #endif
+#endif
                 if (!(act & (ERTS_PTS_FLG_IN_RUNQ|ERTS_PTS_FLG_EXEC)))
                     break; /* Need to enqueue port */
+#ifdef ERTS_DIRTY_SCHEDULERS
+	    if (runq == ERTS_DIRTY_CPU_RUNQ || runq == ERTS_DIRTY_IO_RUNQ) {
+		erts_smp_runq_unlock(runq);
+		erts_smp_notify_inc_runq(runq);
+	    }
+#endif
 	    goto done; /* Done */
 	}
 
-	if (act & ERTS_PTS_FLG_EXIT)
+	if (act & ERTS_PTS_FLG_EXIT) {
+#ifdef ERTS_DIRTY_SCHEDULERS
+	    if (runq == ERTS_DIRTY_CPU_RUNQ || runq == ERTS_DIRTY_IO_RUNQ) {
+		erts_smp_runq_unlock(runq);
+		erts_smp_notify_inc_runq(runq);
+	    }
+#endif
 	    goto done; /* Died after our task insert... */
+	}
     }
 
     if (prof_runnable_ports) {
@@ -1690,14 +1722,17 @@ erts_port_task_schedule(Eterm id,
 
     /* Enqueue port on run-queue */
 
-    if (!runq)
+    if (!runq) {
 	runq = erts_port_runq(pp);
-    if (!runq)
-	ERTS_INTERNAL_ERROR("Missing run-queue");
+	if (!runq)
+	    ERTS_INTERNAL_ERROR("Missing run-queue");
+    }
 
 #ifdef ERTS_SMP
+#if 0
 #ifdef ERTS_DIRTY_SCHEDULERS
     if (!(add_flags & (ERTS_PTS_FLG_DIRTY_CPU_JOB|ERTS_PTS_FLG_DIRTY_IO_JOB)))
+#endif
 #endif
     {
         xrunq = erts_check_emigration_need(runq, ERTS_PORT_PRIO_LEVEL);
@@ -1849,7 +1884,12 @@ erts_port_task_execute(ErtsRunQueue *runq, Port **curr_port_pp)
 
     prepare_exec(pp, &execq, &processing_busy_q);
 
-    erts_smp_port_lock(pp);
+#if defined(ERTS_DIRTY_SCHEDULERS) && defined(ERTS_SMP)
+    if (ERTS_RUNQ_IX_IS_DIRTY(runq->ix))
+	erts_thr_id2port_sflgs(pp->common.id, ERTS_PORT_SFLGS_INVALID_LOOKUP);
+    else
+#endif
+	erts_smp_port_lock(pp);
 
     /* trace port scheduling, in */
     if (IS_TRACED_FL(pp, F_TRACE_SCHED_PORTS)) {
@@ -2016,7 +2056,12 @@ erts_port_task_execute(ErtsRunQueue *runq, Port **curr_port_pp)
 
     reds = pp->reds - vreds;
 
-    erts_port_release(pp);
+#if defined(ERTS_DIRTY_SCHEDULERS) && defined(ERTS_SMP)
+    if (ERTS_RUNQ_IX_IS_DIRTY(runq->ix))
+	erts_thr_port_release(pp);
+    else
+#endif
+	erts_port_release(pp);
 
     *curr_port_pp = NULL;
 

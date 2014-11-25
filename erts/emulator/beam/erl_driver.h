@@ -274,7 +274,6 @@ typedef struct {
  * Exception code from open_port/2 will be {'EXIT',{badarg,Where}}.
  */
 #define ERL_DRV_ERROR_BADARG ((ErlDrvData) -3)
-
 #ifdef ERL_DRV_CALLBACK_SCHEDULING
 /*
  * Exception code used to reschedule driver callbacks. This is never
@@ -292,6 +291,7 @@ typedef struct {
 #define ERL_DRV_RESCHEDULE_DIRTY_CPU ((ErlDrvSSizeT) -5)
 #define ERL_DRV_RESCHEDULE_DIRTY_IO ((ErlDrvSSizeT) -6)
 #endif
+
 
 typedef struct erl_io_vec {
     int vsize;			/* length of vectors */
@@ -596,8 +596,10 @@ EXTERN char* erl_drv_rwlock_name(ErlDrvRWLock *rwlck);
 EXTERN char* erl_drv_thread_name(ErlDrvTid tid);
 
 #ifdef ERL_DRV_CALLBACK_SCHEDULING
+/*
+ * Callback scheduling API.
+ */
 typedef ErlDrvSSizeT (*ErlDrvCallback)(ErlDrvData drv_data, void* arg);
-
 EXTERN ErlDrvSSizeT erl_drv_schedule_callback(ErlDrvPort port,
 					      int flags,
 					      ErlDrvCallback callback,

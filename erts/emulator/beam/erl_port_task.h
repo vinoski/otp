@@ -51,6 +51,13 @@ typedef erts_smp_atomic_t ErtsPortTaskHandle;
 #define ERTS_PT_FLG_NOSUSPEND		(1 << 2)
 #define ERTS_PT_FLG_REF			(1 << 3)
 #define ERTS_PT_FLG_BAD_OUTPUT		(1 << 4)
+#ifdef ERTS_DIRTY_SCHEDULERS
+#define ERTS_PT_FLG_DIRTY_CPU_JOB	(1 << 5)
+#define ERTS_PT_FLG_DIRTY_IO_JOB	(1 << 6)
+
+#define ERTS_PT_FLGS_DIRTY \
+    (ERTS_PT_FLG_DIRTY_CPU_JOB | ERTS_PT_FLG_DIRTY_IO_JOB)
+#endif
 
 typedef enum {
     ERTS_PORT_TASK_INPUT,
@@ -82,14 +89,6 @@ extern erts_smp_atomic_t erts_port_task_outstanding_io_tasks;
 #define ERTS_PTS_FLG_FORCE_SCHED		(((erts_aint32_t) 1) << 10)
 #define ERTS_PTS_FLG_EXITING			(((erts_aint32_t) 1) << 11)
 #define ERTS_PTS_FLG_EXEC_IMM			(((erts_aint32_t) 1) << 12)
-#ifdef ERTS_DIRTY_SCHEDULERS
-#define ERTS_PTS_FLG_DIRTY_CPU_JOB		(((erts_aint32_t) 1) << 13)
-#define ERTS_PTS_FLG_DIRTY_IO_JOB		(((erts_aint32_t) 1) << 14)
-#define ERTS_PTS_FLG_RESCHED			(((erts_aint32_t) 1) << 15)
-
-#define ERTS_PTS_FLGS_DIRTY \
-    (ERTS_PTS_FLG_DIRTY_CPU_JOB | ERTS_PTS_FLG_DIRTY_IO_JOB)
-#endif
 
 #define ERTS_PTS_FLGS_BUSY \
     (ERTS_PTS_FLG_BUSY_PORT | ERTS_PTS_FLG_BUSY_PORT_Q)
