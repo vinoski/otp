@@ -101,6 +101,79 @@ typedef struct line_buf {  /* Buffer used in line oriented I/O */
 			      The rest is the overflow buffer. */
 } LineBuf;
 
+#ifdef ERL_DRV_CALLBACK_SCHEDULING
+typedef enum {
+    ERTS_PORT_DRV_CALLBACK_NONE,
+    ERTS_PORT_DRV_CALLBACK_OUTPUT,
+    ERTS_PORT_DRV_CALLBACK_READY_INPUT,
+    ERTS_PORT_DRV_CALLBACK_READY_OUTPUT,
+    ERTS_PORT_DRV_CALLBACK_CONTROL,
+    ERTS_PORT_DRV_CALLBACK_TIMEOUT,
+    ERTS_PORT_DRV_CALLBACK_OUTPUTV,
+    ERTS_PORT_DRV_CALLBACK_READY_ASYNC,
+    ERTS_PORT_DRV_CALLBACK_CALL,
+    ERTS_PORT_DRV_CALLBACK_PROCESS_EXIT,
+    ERTS_PORT_DRV_CALLBACK_STOP_SELECT
+} ErtsPortDrvCallbackType;
+
+typedef struct {
+    ErtsPortDrvCallbackType type;
+    int flags;
+    union {
+	struct {
+	    ErlDrvCallbackOutput cb;
+	    char* buf;
+	    ErlDrvSizeT len;
+	} output;
+	struct {
+	    ErlDrvCallbackReadyInput cb;
+	    ErlDrvEvent event;
+	} ready_input;
+	struct {
+	    ErlDrvCallbackReadyOutput cb;
+	    ErlDrvEvent event;
+	} ready_output;
+	struct {
+	    ErlDrvCallbackControl cb;
+	    unsigned int command;
+	    char* buf;
+	    ErlDrvSizeT len;
+	    char** rbuf;
+	    ErlDrvSizeT rlen;
+	} control;
+	struct {
+	    ErlDrvCallbackTimeout cb;
+	} timeout;
+	struct {
+	    ErlDrvCallbackOutputv cb;
+	    ErlIOVec* ev;
+	} outputv;
+	struct {
+	    ErlDrvCallbackReadyAsync cb;
+	    ErlDrvThreadData thread_data;
+	} ready_async;
+	struct {
+	    ErlDrvCallbackCall cb;
+	    unsigned int command;
+	    char* buf;
+	    ErlDrvSizeT len;
+	    char** rbuf;
+	    ErlDrvSizeT rlen;
+	    unsigned int* call_flags;
+	} call;
+	struct {
+	    ErlDrvCallbackProcessExit cb;
+	    ErlDrvMonitor* monitor;
+	} process_exit;
+	struct {
+	    ErlDrvCallbackStopSelect cb;
+	    void* reserved;
+	} stop_select;
+    } u;
+} ErtsPortDrvCallback;
+#endif
+
+
 /*
  * Items part of erlang:port_info/1 result. Note am_registered_name
  * *need* to be first.
@@ -127,11 +200,6 @@ typedef struct line_buf {  /* Buffer used in line oriented I/O */
 #define ERTS_PRTSD_SCHED_CALLBACK 1
 
 #define ERTS_PRTSD_SIZE 2
-
-typedef struct {
-    ErlDrvCallback cb;
-    void* arg;
-} ErtsPrtSDCallback;
 #else
 #define ERTS_PRTSD_SIZE 1
 #endif
@@ -824,13 +892,6 @@ struct binary;
 #define ERTS_P2P_SIG_DATA_FLG_BROKEN_LINK	ERTS_P2P_SIG_DATA_FLG(5)
 #define ERTS_P2P_SIG_DATA_FLG_SCHED		ERTS_P2P_SIG_DATA_FLG(6)
 #define ERTS_P2P_SIG_DATA_FLG_ASYNC		ERTS_P2P_SIG_DATA_FLG(7)
-#ifdef ERL_DRV_CALLBACK_SCHEDULING
-#define ERTS_P2P_SIG_DATA_FLG_RESCHED		ERTS_P2P_SIG_DATA_FLG(8)
-#endif
-#ifdef ERTS_DIRTY_SCHEDULERS
-#define ERTS_P2P_SIG_DATA_FLG_RESCHED_DIRTY_CPU	ERTS_P2P_SIG_DATA_FLG(9)
-#define ERTS_P2P_SIG_DATA_FLG_RESCHED_DIRTY_IO	ERTS_P2P_SIG_DATA_FLG(10)
-#endif
 
 struct ErtsProc2PortSigData_ {
     int flags;
@@ -927,12 +988,8 @@ typedef enum {
     ERTS_PORT_OP_SCHEDULED,
     ERTS_PORT_OP_DROPPED,
     ERTS_PORT_OP_DONE
-#ifdef ERTS_DIRTY_SCHEDULERS
-    , ERTS_PORT_OP_RESCHED_DIRTY_CPU,
-    ERTS_PORT_OP_RESCHED_DIRTY_IO
-#endif
 #ifdef ERL_DRV_CALLBACK_SCHEDULING
-    , ERTS_PORT_OP_RESCHED
+    , ERTS_PORT_OP_SCHED_CALLBACK
 #endif
 } ErtsPortOpResult;
 

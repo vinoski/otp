@@ -89,6 +89,9 @@ extern erts_smp_atomic_t erts_port_task_outstanding_io_tasks;
 #define ERTS_PTS_FLG_FORCE_SCHED		(((erts_aint32_t) 1) << 10)
 #define ERTS_PTS_FLG_EXITING			(((erts_aint32_t) 1) << 11)
 #define ERTS_PTS_FLG_EXEC_IMM			(((erts_aint32_t) 1) << 12)
+#ifdef ERL_DRV_CALLBACK_SCHEDULING
+#define ERTS_PTS_FLG_SCHED_CALLBACK		(((erts_aint32_t) 1) << 13)
+#endif
 
 #define ERTS_PTS_FLGS_BUSY \
     (ERTS_PTS_FLG_BUSY_PORT | ERTS_PTS_FLG_BUSY_PORT_Q)

@@ -1,7 +1,7 @@
 /*
  * %CopyrightBegin%
  *
- * Copyright Ericsson AB 2006-2013. All Rights Reserved.
+ * Copyright Ericsson AB 2006-2014. All Rights Reserved.
  *
  * The contents of this file are subject to the Erlang Public License,
  * Version 1.1, (the "License"); you may not use this file except in
@@ -91,10 +91,9 @@ typedef union {
 	ErtsProc2PortSigCallback callback;
 	ErtsProc2PortSigData data;
     } psig;
-    struct {
-	ErlDrvCallback callback;
-	void* arg;
-    } cb;
+#ifdef ERL_DRV_CALLBACK_SCHEDULING
+    ErtsPortDrvCallback cb;
+#endif
 } ErtsPortTaskTypeData;
 
 struct ErtsPortTask_ {
@@ -960,7 +959,7 @@ enqueue_task(Port *pp,
 	    ASSERT(pp->sched.taskq.in.first);
 	    ASSERT(!pp->sched.taskq.in.last->u.alive.next);
 
-#ifdef ERTS_DIRTY_SCHEDULERS
+#ifdef ERL_DRV_CALLBACK_SCHEDULING
 	    if (queue_at_front) {
 		ptp->u.alive.next = pp->sched.taskq.in.first;
 		pp->sched.taskq.in.first = ptp;
@@ -973,7 +972,7 @@ enqueue_task(Port *pp,
 
 	    pp->sched.taskq.in.first = ptp;
 	}
-#ifdef ERTS_DIRTY_SCHEDULERS
+#ifdef ERL_DRV_CALLBACK_SCHEDULING
 	if (!queue_at_front || !pp->sched.taskq.in.last)
 #endif
             pp->sched.taskq.in.last = ptp;
@@ -1262,59 +1261,295 @@ erl_drv_consume_timeslice(ErlDrvPort dprt, int percent)
 }
 
 #ifdef ERL_DRV_CALLBACK_SCHEDULING
-/*
- * Schedule a generic callback
- */
-ErlDrvSSizeT
-erl_drv_schedule_callback(ErlDrvPort dprt, int flags, ErlDrvCallback cb, void* arg)
+
+static ERTS_INLINE ErlDrvSSizeT
+check_callback_flags(int flags)
 {
-#if 0
-    ErtsPrtSDCallback* prtsd;
+    ErlDrvSSizeT result;
+#ifdef ERTS_DIRTY_SCHEDULERS
+    int chk = (flags & (ERL_DRV_DIRTY_JOB_CPU_BOUND|ERL_DRV_DIRTY_JOB_IO_BOUND));
+    if (chk && chk != ERL_DRV_DIRTY_JOB_CPU_BOUND && chk != ERL_DRV_DIRTY_JOB_IO_BOUND)
+	return (ErlDrvSSizeT) ERL_DRV_ERROR_BADARG;
+    switch (chk) {
+    case ERL_DRV_DIRTY_JOB_CPU_BOUND:
+	result = (ErlDrvSSizeT) ERL_DRV_RESCHEDULE_DIRTY_CPU;
+	break;
+    case ERL_DRV_DIRTY_JOB_IO_BOUND:
+	result = (ErlDrvSSizeT) ERL_DRV_RESCHEDULE_DIRTY_IO;
+	break;
+    case 0:
+	result = (ErlDrvSSizeT) ERL_DRV_RESCHEDULE;
+	break;
+    default:
+	result = (ErlDrvSSizeT) ERL_DRV_ERROR_BADARG;
+    }
+#else
+    result = flags ? (ErlDrvSSizeT) ERL_DRV_ERROR_BADARG : (ErlDrvSSizeT) ERL_DRV_RESCHEDULE;
 #endif
+    return result;
+}
+
+static ERTS_INLINE ErtsPortDrvCallback*
+get_port_specific_callback_data(Port* pp)
+{
+    ErtsPortDrvCallback* prtsd = erts_prtsd_get(pp, ERTS_PRTSD_SCHED_CALLBACK);
+    if (!prtsd) {
+	prtsd = erts_alloc(ERTS_ALC_T_PRTSD, sizeof(ErtsPortDrvCallback));
+	erts_prtsd_set(pp, ERTS_PRTSD_SCHED_CALLBACK, prtsd);
+    }
+    return prtsd;
+}
+
+ErlDrvSSizeT
+erl_drv_schedule_output(ErlDrvPort dprt, int flags,
+			ErlDrvCallbackOutput callback,
+			char* buf, ErlDrvSizeT len)
+{
+    ErtsPortDrvCallback* prtsd;
     Port *pp;
     ErlDrvSSizeT result;
 
     pp = erts_drvport2port(dprt);
-    if (pp == ERTS_INVALID_ERL_DRV_PORT || cb == NULL)
+    if (pp == ERTS_INVALID_ERL_DRV_PORT || callback == NULL)
 	return (ErlDrvSSizeT) ERL_DRV_ERROR_BADARG;
-#ifndef ERTS_DIRTY_SCHEDULERS
-    if (flags)
-	return (ErlDrvSSizeT) ERL_DRV_ERROR_BADARG;
-#else
-    {
-	int chk = (flags & (ERL_DRV_DIRTY_JOB_CPU_BOUND|ERL_DRV_DIRTY_JOB_IO_BOUND));
-	if (chk && chk != ERL_DRV_DIRTY_JOB_CPU_BOUND && chk != ERL_DRV_DIRTY_JOB_IO_BOUND)
-	    return (ErlDrvSSizeT) ERL_DRV_ERROR_BADARG;
-	switch (chk) {
-	case ERL_DRV_DIRTY_JOB_CPU_BOUND:
-	    result = (ErlDrvSSizeT) ERL_DRV_RESCHEDULE_DIRTY_CPU;
-	    break;
-	case ERL_DRV_DIRTY_JOB_IO_BOUND:
-	    result = (ErlDrvSSizeT) ERL_DRV_RESCHEDULE_DIRTY_IO;
-	    break;
-	case 0:
-	    result = (ErlDrvSSizeT) ERL_DRV_RESCHEDULE;
-	    break;
-	default:
-	    return (ErlDrvSSizeT) ERL_DRV_ERROR_BADARG;
-	}
-    }
-#endif
-    if (erts_port_task_schedule(pp->common.id, NULL, ERTS_PORT_TASK_CALLBACK, cb, arg, flags) < 0)
-	return (ErlDrvSSizeT) ERL_DRV_ERROR_BADARG;
-
-#if 0
-    prtsd = (ErtsPrtSDCallback*) erts_prtsd_get(pp, ERTS_PRTSD_SCHED_CALLBACK);
-    if (!prtsd) {
-	prtsd = erts_alloc(ERTS_ALC_T_PRTSD, sizeof(ErtsPrtSDCallback));
-	erts_prtsd_set(pp, ERTS_PRTSD_SCHED_CALLBACK, prtsd);
-    }
-    prtsd->cb = cb;
-    prtsd->arg = arg;
-#endif
-
+    result = check_callback_flags(flags);
+    if (result == (ErlDrvSSizeT) ERL_DRV_ERROR_BADARG)
+        return result;
+    prtsd = get_port_specific_callback_data(pp);
+    prtsd->type = ERTS_PORT_DRV_CALLBACK_OUTPUT;
+    prtsd->flags = flags;
+    prtsd->u.output.cb = callback;
+    prtsd->u.output.buf = buf;
+    prtsd->u.output.len = len;
+    erts_smp_atomic32_read_bor_nob(&pp->sched.flags, ERTS_PTS_FLG_SCHED_CALLBACK);
     return result;
 }
+
+ErlDrvSSizeT
+erl_drv_schedule_ready_input(ErlDrvPort dprt, int flags,
+			     ErlDrvCallbackReadyInput callback,
+			     ErlDrvEvent event)
+{
+    ErtsPortDrvCallback* prtsd;
+    Port *pp;
+    ErlDrvSSizeT result;
+
+    pp = erts_drvport2port(dprt);
+    if (pp == ERTS_INVALID_ERL_DRV_PORT || callback == NULL)
+	return (ErlDrvSSizeT) ERL_DRV_ERROR_BADARG;
+    result = check_callback_flags(flags);
+    if (result == (ErlDrvSSizeT) ERL_DRV_ERROR_BADARG)
+        return result;
+    prtsd = get_port_specific_callback_data(pp);
+    prtsd->type = ERTS_PORT_DRV_CALLBACK_READY_INPUT;
+    prtsd->flags = flags;
+    prtsd->u.ready_input.cb = callback;
+    prtsd->u.ready_input.event = event;
+    erts_smp_atomic32_read_bor_nob(&pp->sched.flags, ERTS_PTS_FLG_SCHED_CALLBACK);
+    return result;
+}
+
+ErlDrvSSizeT
+erl_drv_schedule_ready_output(ErlDrvPort dprt, int flags,
+			      ErlDrvCallbackReadyOutput callback,
+			      ErlDrvEvent event)
+{
+    ErtsPortDrvCallback* prtsd;
+    Port *pp;
+    ErlDrvSSizeT result;
+
+    pp = erts_drvport2port(dprt);
+    if (pp == ERTS_INVALID_ERL_DRV_PORT || callback == NULL)
+	return (ErlDrvSSizeT) ERL_DRV_ERROR_BADARG;
+    result = check_callback_flags(flags);
+    if (result == (ErlDrvSSizeT) ERL_DRV_ERROR_BADARG)
+        return result;
+    prtsd = get_port_specific_callback_data(pp);
+    prtsd->type = ERTS_PORT_DRV_CALLBACK_READY_OUTPUT;
+    prtsd->flags = flags;
+    prtsd->u.ready_output.cb = callback;
+    prtsd->u.ready_output.event = event;
+    erts_smp_atomic32_read_bor_nob(&pp->sched.flags, ERTS_PTS_FLG_SCHED_CALLBACK);
+    return result;
+}
+
+ErlDrvSSizeT
+erl_drv_schedule_control(ErlDrvPort dprt, int flags,
+			 ErlDrvCallbackControl callback,
+			 unsigned int command,
+			 char *buf, ErlDrvSizeT len,
+			 char **rbuf, ErlDrvSizeT rlen)
+{
+    ErtsPortDrvCallback* prtsd;
+    Port *pp;
+    ErlDrvSSizeT result;
+
+    pp = erts_drvport2port(dprt);
+    if (pp == ERTS_INVALID_ERL_DRV_PORT || callback == NULL)
+	return (ErlDrvSSizeT) ERL_DRV_ERROR_BADARG;
+    result = check_callback_flags(flags);
+    if (result == (ErlDrvSSizeT) ERL_DRV_ERROR_BADARG)
+        return result;
+    prtsd = get_port_specific_callback_data(pp);
+    prtsd->type = ERTS_PORT_DRV_CALLBACK_CONTROL;
+    prtsd->flags = flags;
+    prtsd->u.control.cb = callback;
+    prtsd->u.control.command = command;
+    prtsd->u.control.buf = buf;
+    prtsd->u.control.len = len;
+    prtsd->u.control.rbuf = rbuf;
+    prtsd->u.control.rlen = rlen;
+    erts_smp_atomic32_read_bor_nob(&pp->sched.flags, ERTS_PTS_FLG_SCHED_CALLBACK);
+    return result;
+}
+
+
+ErlDrvSSizeT
+erl_drv_schedule_timeout(ErlDrvPort dprt, int flags,
+			 ErlDrvCallbackTimeout callback)
+{
+    ErtsPortDrvCallback* prtsd;
+    Port *pp;
+    ErlDrvSSizeT result;
+
+    pp = erts_drvport2port(dprt);
+    if (pp == ERTS_INVALID_ERL_DRV_PORT || callback == NULL)
+	return (ErlDrvSSizeT) ERL_DRV_ERROR_BADARG;
+    result = check_callback_flags(flags);
+    if (result == (ErlDrvSSizeT) ERL_DRV_ERROR_BADARG)
+        return result;
+    prtsd = get_port_specific_callback_data(pp);
+    prtsd->type = ERTS_PORT_DRV_CALLBACK_TIMEOUT;
+    prtsd->flags = flags;
+    prtsd->u.timeout.cb = callback;
+    erts_smp_atomic32_read_bor_nob(&pp->sched.flags, ERTS_PTS_FLG_SCHED_CALLBACK);
+    return result;
+}
+
+ErlDrvSSizeT
+erl_drv_schedule_outputv(ErlDrvPort dprt, int flags,
+			 ErlDrvCallbackOutputv callback,
+			 ErlIOVec* ev)
+{
+    ErtsPortDrvCallback* prtsd;
+    Port *pp;
+    ErlDrvSSizeT result;
+
+    pp = erts_drvport2port(dprt);
+    if (pp == ERTS_INVALID_ERL_DRV_PORT || callback == NULL)
+	return (ErlDrvSSizeT) ERL_DRV_ERROR_BADARG;
+    result = check_callback_flags(flags);
+    if (result == (ErlDrvSSizeT) ERL_DRV_ERROR_BADARG)
+        return result;
+    prtsd = get_port_specific_callback_data(pp);
+    prtsd->type = ERTS_PORT_DRV_CALLBACK_OUTPUTV;
+    prtsd->flags = flags;
+    prtsd->u.outputv.ev = ev;
+    erts_smp_atomic32_read_bor_nob(&pp->sched.flags, ERTS_PTS_FLG_SCHED_CALLBACK);
+    return result;
+}
+
+ErlDrvSSizeT
+erl_drv_schedule_ready_async(ErlDrvPort dprt, int flags,
+			     ErlDrvCallbackReadyAsync callback,
+			     ErlDrvThreadData thread_data)
+{
+    ErtsPortDrvCallback* prtsd;
+    Port *pp;
+    ErlDrvSSizeT result;
+
+    pp = erts_drvport2port(dprt);
+    if (pp == ERTS_INVALID_ERL_DRV_PORT || callback == NULL)
+	return (ErlDrvSSizeT) ERL_DRV_ERROR_BADARG;
+    result = check_callback_flags(flags);
+    if (result == (ErlDrvSSizeT) ERL_DRV_ERROR_BADARG)
+        return result;
+    prtsd = get_port_specific_callback_data(pp);
+    prtsd->type = ERTS_PORT_DRV_CALLBACK_READY_ASYNC;
+    prtsd->flags = flags;
+    prtsd->u.ready_async.thread_data = thread_data;
+    erts_smp_atomic32_read_bor_nob(&pp->sched.flags, ERTS_PTS_FLG_SCHED_CALLBACK);
+    return result;
+}
+
+ErlDrvSSizeT
+erl_drv_schedule_call(ErlDrvPort dprt, int flags,
+		      ErlDrvCallbackCall callback,
+		      unsigned int command,
+		      char *buf, ErlDrvSizeT len,
+		      char **rbuf, ErlDrvSizeT rlen,
+		      unsigned int *call_flags)
+{
+    ErtsPortDrvCallback* prtsd;
+    Port *pp;
+    ErlDrvSSizeT result;
+
+    pp = erts_drvport2port(dprt);
+    if (pp == ERTS_INVALID_ERL_DRV_PORT || callback == NULL)
+	return (ErlDrvSSizeT) ERL_DRV_ERROR_BADARG;
+    result = check_callback_flags(flags);
+    if (result == (ErlDrvSSizeT) ERL_DRV_ERROR_BADARG)
+        return result;
+    prtsd = get_port_specific_callback_data(pp);
+    prtsd->type = ERTS_PORT_DRV_CALLBACK_CALL;
+    prtsd->flags = flags;
+    prtsd->u.call.cb = callback;
+    prtsd->u.call.command = command;
+    prtsd->u.call.buf = buf;
+    prtsd->u.call.len = len;
+    prtsd->u.call.rbuf = rbuf;
+    prtsd->u.call.rlen = rlen;
+    prtsd->u.call.call_flags = call_flags;
+    erts_smp_atomic32_read_bor_nob(&pp->sched.flags, ERTS_PTS_FLG_SCHED_CALLBACK);
+    return result;
+}
+
+ErlDrvSSizeT
+erl_drv_schedule_process_exit(ErlDrvPort dprt, int flags,
+			      ErlDrvCallbackProcessExit callback,
+			      ErlDrvMonitor* monitor)
+{
+    ErtsPortDrvCallback* prtsd;
+    Port *pp;
+    ErlDrvSSizeT result;
+
+    pp = erts_drvport2port(dprt);
+    if (pp == ERTS_INVALID_ERL_DRV_PORT || callback == NULL)
+	return (ErlDrvSSizeT) ERL_DRV_ERROR_BADARG;
+    result = check_callback_flags(flags);
+    if (result == (ErlDrvSSizeT) ERL_DRV_ERROR_BADARG)
+        return result;
+    prtsd = get_port_specific_callback_data(pp);
+    prtsd->type = ERTS_PORT_DRV_CALLBACK_PROCESS_EXIT;
+    prtsd->flags = flags;
+    prtsd->u.process_exit.monitor = monitor;
+    erts_smp_atomic32_read_bor_nob(&pp->sched.flags, ERTS_PTS_FLG_SCHED_CALLBACK);
+    return result;
+}
+
+ErlDrvSSizeT
+erl_drv_schedule_stop_select(ErlDrvPort dprt, int flags,
+			     ErlDrvCallbackStopSelect callback,
+			     void* reserved)
+{
+    ErtsPortDrvCallback* prtsd;
+    Port *pp;
+    ErlDrvSSizeT result;
+
+    pp = erts_drvport2port(dprt);
+    if (pp == ERTS_INVALID_ERL_DRV_PORT || callback == NULL)
+	return (ErlDrvSSizeT) ERL_DRV_ERROR_BADARG;
+    result = check_callback_flags(flags);
+    if (result == (ErlDrvSSizeT) ERL_DRV_ERROR_BADARG)
+        return result;
+    prtsd = get_port_specific_callback_data(pp);
+    prtsd->type = ERTS_PORT_DRV_CALLBACK_STOP_SELECT;
+    prtsd->flags = flags;
+    prtsd->u.stop_select.reserved = reserved;
+    erts_smp_atomic32_read_bor_nob(&pp->sched.flags, ERTS_PTS_FLG_SCHED_CALLBACK);
+    return result;
+}
+
 #endif
 
 #ifdef ERTS_DIRTY_SCHEDULERS
@@ -1500,10 +1735,10 @@ erts_port_task_schedule(Eterm id,
     ErtsPortTask *ptp = NULL;
     erts_aint32_t act, add_flags;
     unsigned int prof_runnable_ports;
-#ifdef ERTS_DIRTY_SCHEDULERS
-    erts_aint32_t rm_flags = 0;
-#endif
     int queue_at_front = 0;
+#ifdef ERL_DRV_CALLBACK_SCHEDULING
+    int dirty_runq = 0;
+#endif
 
     ERTS_LC_ASSERT(!pthp || !erts_port_task_is_scheduled(pthp));
 
@@ -1577,30 +1812,17 @@ erts_port_task_schedule(Eterm id,
 #if defined(ERL_DRV_CALLBACK_SCHEDULING) && defined(ERTS_SMP)
 	if (sigdp->flags & ERTS_P2P_SIG_DATA_FLG_RESCHED) {
 	    erts_smp_atomic32_init_nob(&ptp->state, ERTS_PT_STATE_SCHEDULED);
-	    rm_flags |= (ERTS_PTS_FLG_DIRTY_CPU_JOB|ERTS_PTS_FLG_DIRTY_IO_JOB);
-	    runq = erts_port_runq(pp);
-	    if (ERTS_RUNQ_IX_IS_DIRTY(runq->ix)) {
-		/* TODO: how to flip back to a regular run queue?
-		 * TODO: for now just use run queue 0
-		 * TODO: check Rickard's email for right way to do this */
-		erts_smp_atomic_set_nob(&pp->run_queue, (erts_aint_t) ERTS_RUNQ_IX(0));
-	    }
-	    erts_smp_runq_unlock(runq);
 	    queue_at_front = 1;
 	}
 #endif
 #if defined(ERTS_DIRTY_SCHEDULERS) && defined(ERTS_SMP)
 	if (sigdp->flags & ERTS_P2P_SIG_DATA_FLG_RESCHED_DIRTY_CPU) {
 	    erts_smp_atomic32_init_nob(&ptp->state, ERTS_PT_STATE_SCHEDULED);
-	    add_flags |= ERTS_PTS_FLG_DIRTY_CPU_JOB;
-	    rm_flags |= ERTS_PTS_FLG_DIRTY_IO_JOB;
 	    runq = ERTS_DIRTY_CPU_RUNQ;
 	    erts_smp_runq_lock(runq);
 	    queue_at_front = 1;
 	} else if (sigdp->flags & ERTS_P2P_SIG_DATA_FLG_RESCHED_DIRTY_IO) {
 	    erts_smp_atomic32_init_nob(&ptp->state, ERTS_PT_STATE_SCHEDULED);
-	    add_flags |= ERTS_PTS_FLG_DIRTY_IO_JOB;
-	    rm_flags |= ERTS_PTS_FLG_DIRTY_CPU_JOB;
 	    runq = ERTS_DIRTY_IO_RUNQ;
 	    erts_smp_runq_lock(runq);
 	    queue_at_front = 1;
@@ -1611,28 +1833,25 @@ erts_port_task_schedule(Eterm id,
     }
 #ifdef ERL_DRV_CALLBACK_SCHEDULING
     case ERTS_PORT_TASK_CALLBACK: {
-	ErlDrvCallback cb;
-	void* arg;
-	int flags;
+	ErtsPortDrvCallback* cb;
 	va_list argp;
 	va_start(argp, type);
-	cb = va_arg(argp, ErlDrvCallback);
-	arg = va_arg(argp, void*);
-	flags = va_arg(argp, int);
-	ptp->u.alive.td.cb.callback = cb;
-	ptp->u.alive.td.cb.arg = arg;
+	cb = va_arg(argp, ErtsPortDrvCallback*);
+	va_end(argp);
+	ptp->u.alive.td.cb = *cb;
 #if defined(ERTS_DIRTY_SCHEDULERS) && defined(ERTS_SMP)
-	if (flags & ERL_DRV_DIRTY_JOB_CPU_BOUND) {
+	if (cb->flags & ERL_DRV_DIRTY_JOB_CPU_BOUND) {
 	    ptp->u.alive.flags |= ERTS_PT_FLG_DIRTY_CPU_JOB;
 	    runq = ERTS_DIRTY_CPU_RUNQ;
 	    erts_smp_runq_lock(runq);
-	} else if (flags & ERL_DRV_DIRTY_JOB_IO_BOUND) {
+	    dirty_runq = 1;
+	} else if (cb->flags & ERL_DRV_DIRTY_JOB_IO_BOUND) {
 	    ptp->u.alive.flags |= ERTS_PT_FLG_DIRTY_IO_JOB;
 	    runq = ERTS_DIRTY_IO_RUNQ;
 	    erts_smp_runq_lock(runq);
+	    dirty_runq = 1;
 	}
 #endif
-/*	add_flags |= ERTS_PTS_FLG_IN_RUNQ;*/
 	queue_at_front = 1;
 	break;
     }
@@ -1660,55 +1879,32 @@ erts_port_task_schedule(Eterm id,
 	erts_aint32_t new, exp;
 
 	if ((act & add_flags) == add_flags
+	    && (act & (ERTS_PTS_FLG_IN_RUNQ|ERTS_PTS_FLG_EXEC))
 #ifdef ERTS_DIRTY_SCHEDULERS
-	    && !rm_flags
+	    && !dirty_runq
 #endif
-	    && (act & (ERTS_PTS_FLG_IN_RUNQ|ERTS_PTS_FLG_EXEC))) {
-#ifdef ERTS_DIRTY_SCHEDULERS
-	    if (runq == ERTS_DIRTY_CPU_RUNQ || runq == ERTS_DIRTY_IO_RUNQ) {
-		erts_smp_runq_unlock(runq);
-		erts_smp_notify_inc_runq(runq);
-	    }
-#endif
+	    )
 	    goto done; /* Done */
-	}
 
 	new = exp = act;
 	new |= add_flags;
-#ifdef ERTS_DIRTY_SCHEDULERS
-	new &= ~rm_flags;
-#endif
 	if (!(act & (ERTS_PTS_FLG_IN_RUNQ|ERTS_PTS_FLG_EXEC)))
 	    new |= ERTS_PTS_FLG_IN_RUNQ;
 
 	act = erts_smp_atomic32_cmpxchg_relb(&pp->sched.flags, new, exp);
 
 	if (exp == act) {
-#if 0
-#if defined(ERTS_DIRTY_SCHEDULERS) && defined(ERTS_SMP)
-	    if (add_flags & (ERTS_PTS_FLG_DIRTY_CPU_JOB|ERTS_PTS_FLG_DIRTY_IO_JOB))
+#ifdef ERTS_DIRTY_SCHEDULERS
+	    if (dirty_runq)
 		break; /* need to enqueue on or off dirty runq */
 	    else
 #endif
-#endif
                 if (!(act & (ERTS_PTS_FLG_IN_RUNQ|ERTS_PTS_FLG_EXEC)))
                     break; /* Need to enqueue port */
-#ifdef ERTS_DIRTY_SCHEDULERS
-	    if (runq == ERTS_DIRTY_CPU_RUNQ || runq == ERTS_DIRTY_IO_RUNQ) {
-		erts_smp_runq_unlock(runq);
-		erts_smp_notify_inc_runq(runq);
-	    }
-#endif
 	    goto done; /* Done */
 	}
 
 	if (act & ERTS_PTS_FLG_EXIT) {
-#ifdef ERTS_DIRTY_SCHEDULERS
-	    if (runq == ERTS_DIRTY_CPU_RUNQ || runq == ERTS_DIRTY_IO_RUNQ) {
-		erts_smp_runq_unlock(runq);
-		erts_smp_notify_inc_runq(runq);
-	    }
-#endif
 	    goto done; /* Died after our task insert... */
 	}
     }
@@ -1729,10 +1925,8 @@ erts_port_task_schedule(Eterm id,
     }
 
 #ifdef ERTS_SMP
-#if 0
 #ifdef ERTS_DIRTY_SCHEDULERS
-    if (!(add_flags & (ERTS_PTS_FLG_DIRTY_CPU_JOB|ERTS_PTS_FLG_DIRTY_IO_JOB)))
-#endif
+    if (!dirty_runq)
 #endif
     {
         xrunq = erts_check_emigration_need(runq, ERTS_PORT_PRIO_LEVEL);
@@ -1989,12 +2183,56 @@ erts_port_task_execute(ErtsRunQueue *runq, Port **curr_port_pp)
 	    reds = erts_dist_command(pp, CONTEXT_REDS - pp->reds);
 	    break;
 #if defined(ERL_DRV_CALLBACK_SCHEDULING) || defined(ERTS_DIRTY_SCHEDULERS)
-	case ERTS_PORT_TASK_CALLBACK: {
+	case ERTS_PORT_TASK_CALLBACK:
 	    ASSERT((state & ERTS_PORT_SFLGS_DEAD) == 0);
-	    /* TODO: need 3 callback variants: control, call, and general callbacks */
-	    (*ptp->u.alive.td.cb.callback)((ErlDrvData) pp->drv_data, ptp->u.alive.td.cb.arg);
+	    switch (ptp->u.alive.td.cb.type) {
+	    case ERTS_PORT_DRV_CALLBACK_OUTPUT: {
+		char* buf = ptp->u.alive.td.cb.u.output.buf;
+		ErlDrvSizeT len = ptp->u.alive.td.cb.u.output.len;
+		(*ptp->u.alive.td.cb.u.output.cb)((ErlDrvData) pp->drv_data, buf, len);
+		break;
+	    }
+	    case ERTS_PORT_DRV_CALLBACK_READY_INPUT: {
+		ErlDrvEvent event = ptp->u.alive.td.cb.u.ready_input.event;
+		(*ptp->u.alive.td.cb.u.ready_input.cb)((ErlDrvData) pp->drv_data, event);
+		break;
+	    }
+	    case ERTS_PORT_DRV_CALLBACK_READY_OUTPUT: {
+		ErlDrvEvent event = ptp->u.alive.td.cb.u.ready_output.event;
+		(*ptp->u.alive.td.cb.u.ready_output.cb)((ErlDrvData) pp->drv_data, event);
+		break;
+	    }
+	    case ERTS_PORT_DRV_CALLBACK_CONTROL: {
+		unsigned int cmd = ptp->u.alive.td.cb.u.control.command;
+		char* buf = ptp->u.alive.td.cb.u.control.buf;
+		ErlDrvSizeT len = ptp->u.alive.td.cb.u.control.len;
+		char** rbuf = ptp->u.alive.td.cb.u.control.rbuf;
+		ErlDrvSizeT rlen = ptp->u.alive.td.cb.u.control.rlen;
+		(*ptp->u.alive.td.cb.u.control.cb)((ErlDrvData) pp->drv_data,
+						   cmd, buf, len, rbuf, rlen);
+		/* TODO: handle return value */
+		break;
+	    }
+	    case ERTS_PORT_DRV_CALLBACK_TIMEOUT:
+		(*ptp->u.alive.td.cb.u.timeout.cb)((ErlDrvData) pp->drv_data);
+		break;
+	    case ERTS_PORT_DRV_CALLBACK_OUTPUTV:
+		break;
+	    case ERTS_PORT_DRV_CALLBACK_READY_ASYNC:
+		break;
+	    case ERTS_PORT_DRV_CALLBACK_CALL:
+		break;
+	    case ERTS_PORT_DRV_CALLBACK_PROCESS_EXIT:
+		break;
+	    case ERTS_PORT_DRV_CALLBACK_STOP_SELECT:
+		break;
+	    default:
+		erl_exit(ERTS_ABORT_EXIT,
+			 "Invalid port task callback type: %d\n",
+			 (int) ptp->u.alive.td.cb.type);
+		break;
+	    }
 	    break;
-	}
 #endif
 	default:
 	    erl_exit(ERTS_ABORT_EXIT,
@@ -2049,12 +2287,27 @@ erts_port_task_execute(ErtsRunQueue *runq, Port **curr_port_pp)
 
 #ifdef ERTS_SMP
     ASSERT(ERTS_RUNQ_IX_IS_DIRTY(runq->ix)
-          || runq == (ErtsRunQueue *) erts_smp_atomic_read_nob(&pp->run_queue));
+	   || runq == (ErtsRunQueue *) erts_smp_atomic_read_nob(&pp->run_queue));
 #endif
 
     active = finalize_exec(pp, &execq, processing_busy_q);
 
     reds = pp->reds - vreds;
+
+#ifdef ERL_DRV_CALLBACK_SCHEDULING
+    {
+        erts_aint32_t flgs;
+        flgs = erts_smp_atomic32_read_band_nob(&pp->sched.flags, ~ERTS_PTS_FLG_SCHED_CALLBACK);
+        if (flgs & ERTS_PTS_FLG_SCHED_CALLBACK) {
+            ErtsPortDrvCallback* prtsd;
+            prtsd = (ErtsPortDrvCallback*) erts_prtsd_get(pp, ERTS_PRTSD_SCHED_CALLBACK);
+            if (prtsd && prtsd->type != ERTS_PORT_DRV_CALLBACK_NONE) {
+                erts_port_task_schedule(pp->common.id, NULL, ERTS_PORT_TASK_CALLBACK, prtsd);
+                prtsd->type = ERTS_PORT_DRV_CALLBACK_NONE;
+            }
+	}
+    }
+#endif
 
 #if defined(ERTS_DIRTY_SCHEDULERS) && defined(ERTS_SMP)
     if (ERTS_RUNQ_IX_IS_DIRTY(runq->ix))
@@ -2069,16 +2322,30 @@ erts_port_task_execute(ErtsRunQueue *runq, Port **curr_port_pp)
  
     if (active) {
 #ifdef ERTS_SMP
-	ErtsRunQueue *xrunq;
+	ErtsRunQueue *xrunq = NULL;
+#ifdef ERTS_DIRTY_SCHEDULERS
+	int dirty_runq = ERTS_RUNQ_IX_IS_DIRTY(runq->ix);
+#endif
 #endif
 
 	ASSERT(!(erts_atomic32_read_nob(&pp->state) & ERTS_PORT_SFLGS_DEAD));
 
 #ifdef ERTS_SMP
-	xrunq = erts_check_emigration_need(runq, ERTS_PORT_PRIO_LEVEL);
+#ifdef ERTS_DIRTY_SCHEDULERS
+	if (dirty_runq) {
+	    erts_smp_runq_unlock(runq);
+	    runq = (ErtsRunQueue *) erts_smp_atomic_read_nob(&pp->run_queue);
+	    erts_smp_runq_lock(runq);
+	} else
+#endif
+	    xrunq = erts_check_emigration_need(runq, ERTS_PORT_PRIO_LEVEL);
 	ERTS_SMP_LC_ASSERT(runq != xrunq);
 	ERTS_SMP_LC_VERIFY_RQ(runq, pp);
-	if (!xrunq) {
+	if (!xrunq
+#ifdef ERTS_DIRTY_SCHEDULERS
+	    && !dirty_runq
+#endif
+	    ) {
 #endif
 	    enqueue_port(runq, pp);
 	    /* No need to notify ourselves about inc in runq. */
@@ -2086,7 +2353,10 @@ erts_port_task_execute(ErtsRunQueue *runq, Port **curr_port_pp)
 	}
 	else {
 	    /* Emigrate port... */
-	    erts_smp_atomic_set_nob(&pp->run_queue, (erts_aint_t) xrunq);
+#ifdef ERTS_DIRTY_SCHEDULERS
+	    if (!dirty_runq)
+#endif
+		erts_smp_atomic_set_nob(&pp->run_queue, (erts_aint_t) xrunq);
 	    erts_smp_runq_unlock(runq);
 
 	    xrunq = erts_port_runq(pp);

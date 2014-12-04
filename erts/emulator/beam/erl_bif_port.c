@@ -170,12 +170,14 @@ BIF_RETTYPE erts_internal_port_command_3(BIF_ALIST_3)
 	ASSERT(!(flags & ERTS_PORT_SIG_FLG_FORCE));
 	/* Fall through... */
     case ERTS_PORT_OP_SCHEDULED:
+#if DIRTYDIRTYDIRTY
 #ifdef ERTS_DIRTY_SCHEDULERS
     case ERTS_PORT_OP_RESCHED_DIRTY_CPU:
     case ERTS_PORT_OP_RESCHED_DIRTY_IO:
 #endif
 #ifdef ERL_DRV_CALLBACK_SCHEDULING
     case ERTS_PORT_OP_RESCHED:
+#endif
 #endif
 	ASSERT(is_internal_ref(ref));
 	ERTS_BIF_PREP_RET(res, ref);
@@ -228,6 +230,7 @@ BIF_RETTYPE erts_internal_port_call_3(BIF_ALIST_3)
     case ERTS_PORT_OP_DONE:
 	ASSERT(is_not_internal_ref(retval));
 	break;
+#ifdef DIRTYDIRTYDIRTY
 #ifdef ERTS_DIRTY_SCHEDULERS
     case ERTS_PORT_OP_RESCHED_DIRTY_CPU:
     case ERTS_PORT_OP_RESCHED_DIRTY_IO:
@@ -238,6 +241,7 @@ BIF_RETTYPE erts_internal_port_call_3(BIF_ALIST_3)
     case ERTS_PORT_OP_RESCHED:
 	ASSERT(is_internal_ref(retval));
 	break;
+#endif
 #endif
     default:
 	ERTS_INTERNAL_ERROR("Unexpected erts_port_call() result");
@@ -289,6 +293,7 @@ BIF_RETTYPE erts_internal_port_control_3(BIF_ALIST_3)
     case ERTS_PORT_OP_DONE:
 	ASSERT(is_not_internal_ref(retval));
 	break;
+#ifdef DIRTYDIRTYDIRTY
 #ifdef ERTS_DIRTY_SCHEDULERS
     case ERTS_PORT_OP_RESCHED_DIRTY_CPU:
     case ERTS_PORT_OP_RESCHED_DIRTY_IO:
@@ -299,6 +304,7 @@ BIF_RETTYPE erts_internal_port_control_3(BIF_ALIST_3)
     case ERTS_PORT_OP_RESCHED:
 	ASSERT(is_internal_ref(retval));
 	break;
+#endif
 #endif
     default:
 	ERTS_INTERNAL_ERROR("Unexpected erts_port_control() result");

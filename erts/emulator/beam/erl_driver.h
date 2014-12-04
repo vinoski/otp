@@ -599,11 +599,84 @@ EXTERN char* erl_drv_thread_name(ErlDrvTid tid);
 /*
  * Callback scheduling API.
  */
-typedef ErlDrvSSizeT (*ErlDrvCallback)(ErlDrvData drv_data, void* arg);
-EXTERN ErlDrvSSizeT erl_drv_schedule_callback(ErlDrvPort port,
-					      int flags,
-					      ErlDrvCallback callback,
-					      void* arg);
+typedef void (*ErlDrvCallbackOutput)(ErlDrvData drv_data,
+				     char* buf, ErlDrvSizeT len);
+EXTERN ErlDrvSSizeT
+erl_drv_schedule_output(ErlDrvPort port, int flags,
+			ErlDrvCallbackOutput callback,
+			char* buf, ErlDrvSizeT len);
+
+typedef void (*ErlDrvCallbackReadyInput)(ErlDrvData drv_data,
+					 ErlDrvEvent event);
+EXTERN ErlDrvSSizeT
+erl_drv_schedule_ready_input(ErlDrvPort port, int flags,
+			     ErlDrvCallbackReadyInput callback,
+			     ErlDrvEvent event);
+
+typedef void (*ErlDrvCallbackReadyOutput)(ErlDrvData drv_data,
+					  ErlDrvEvent event);
+EXTERN ErlDrvSSizeT
+erl_drv_schedule_ready_output(ErlDrvPort port, int flags,
+			      ErlDrvCallbackReadyOutput callback,
+			      ErlDrvEvent event);
+
+typedef ErlDrvSSizeT (*ErlDrvCallbackControl)(ErlDrvData drv_data,
+					      unsigned int command,
+					      char *buf, ErlDrvSizeT len,
+					      char **rbuf, ErlDrvSizeT rlen);
+EXTERN ErlDrvSSizeT
+erl_drv_schedule_control(ErlDrvPort port, int flags,
+			 ErlDrvCallbackControl callback,
+			 unsigned int command,
+			 char *buf, ErlDrvSizeT len,
+			 char **rbuf, ErlDrvSizeT rlen);
+
+typedef ErlDrvSSizeT (*ErlDrvCallbackTimeout)(ErlDrvData drv_data);
+EXTERN ErlDrvSSizeT
+erl_drv_schedule_timeout(ErlDrvPort port, int flags,
+			 ErlDrvCallbackTimeout callback);
+
+typedef ErlDrvSSizeT (*ErlDrvCallbackOutputv)(ErlDrvData drv_data,
+					      ErlIOVec* ev);
+EXTERN ErlDrvSSizeT
+erl_drv_schedule_outputv(ErlDrvPort port, int flags,
+			 ErlDrvCallbackOutputv callback,
+			 ErlIOVec* ev);
+
+typedef ErlDrvSSizeT (*ErlDrvCallbackReadyAsync)(ErlDrvData drv_data,
+						 ErlDrvThreadData thread_data);
+EXTERN ErlDrvSSizeT
+erl_drv_schedule_ready_async(ErlDrvPort port, int flags,
+			     ErlDrvCallbackReadyAsync callback,
+			     ErlDrvThreadData thread_data);
+
+typedef ErlDrvSSizeT (*ErlDrvCallbackCall)(ErlDrvData drv_data,
+					   unsigned int command,
+					   char *buf, ErlDrvSizeT len,
+					   char **rbuf, ErlDrvSizeT rlen,
+					   unsigned int *flags);
+EXTERN ErlDrvSSizeT
+erl_drv_schedule_call(ErlDrvPort port, int flags,
+		      ErlDrvCallbackCall callback,
+		      unsigned int command,
+		      char *buf, ErlDrvSizeT len,
+		      char **rbuf, ErlDrvSizeT rlen,
+		      unsigned int *call_flags);
+
+typedef ErlDrvSSizeT (*ErlDrvCallbackProcessExit)(ErlDrvData drv_data,
+						  ErlDrvMonitor* monitor);
+EXTERN ErlDrvSSizeT
+erl_drv_schedule_process_exit(ErlDrvPort port, int flags,
+			      ErlDrvCallbackProcessExit callback,
+			      ErlDrvMonitor* monitor);
+
+typedef ErlDrvSSizeT (*ErlDrvCallbackStopSelect)(ErlDrvData drv_data,
+						 void* reserved);
+EXTERN ErlDrvSSizeT
+erl_drv_schedule_stop_select(ErlDrvPort port, int flags,
+			     ErlDrvCallbackStopSelect callback,
+			     void* reserved);
+
 #endif
 #ifdef ERL_DRV_DIRTY_SCHEDULER_SUPPORT
 /*
