@@ -1974,10 +1974,13 @@ erts_psd_get(Process *p, int ix)
 #if defined(ERTS_SMP) && defined(ERTS_ENABLE_LOCK_CHECK)
     ErtsProcLocks locks = erts_proc_lc_my_proc_locks(p);
     if (ERTS_LC_PSD_ANY_LOCK == erts_psd_required_locks[ix].get_locks)
-	ERTS_SMP_LC_ASSERT(locks || erts_thr_progress_is_blocking());
+	ERTS_SMP_LC_ASSERT(locks
+			   || ERTS_SCHEDULER_IS_DIRTY(erts_get_scheduler_data())
+			   || erts_thr_progress_is_blocking());
     else {
 	locks &= erts_psd_required_locks[ix].get_locks;
 	ERTS_SMP_LC_ASSERT(erts_psd_required_locks[ix].get_locks == locks
+			   || ERTS_SCHEDULER_IS_DIRTY(erts_get_scheduler_data())
 			   || erts_thr_progress_is_blocking());
     }
 #endif
@@ -1999,10 +2002,13 @@ erts_psd_set(Process *p, int ix, void *data)
     erts_aint32_t state = state = erts_smp_atomic32_read_nob(&p->state);
     if (!(state & ERTS_PSFLG_FREE)) {
 	if (ERTS_LC_PSD_ANY_LOCK == erts_psd_required_locks[ix].set_locks)
-	    ERTS_SMP_LC_ASSERT(locks || erts_thr_progress_is_blocking());
+	    ERTS_SMP_LC_ASSERT(locks
+			       || ERTS_SCHEDULER_IS_DIRTY(erts_get_scheduler_data())
+			       || erts_thr_progress_is_blocking());
 	else {
 	    locks &= erts_psd_required_locks[ix].set_locks;
 	    ERTS_SMP_LC_ASSERT(erts_psd_required_locks[ix].set_locks == locks
+			       || ERTS_SCHEDULER_IS_DIRTY(erts_get_scheduler_data())
 			       || erts_thr_progress_is_blocking());
 	}
     }
