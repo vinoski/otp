@@ -6003,6 +6003,9 @@ check_enqueue_in_prio_queue(Process *c_p,
 
 #ifdef ERTS_DIRTY_SCHEDULERS
     if (actual & (ERTS_PSFLG_DIRTY_CPU_PROC|ERTS_PSFLG_DIRTY_IO_PROC)) {
+	/* Termination should be done on an ordinary scheduler */
+	if (actual & ERTS_PSFLG_EXITING)
+	    goto enqueue_normal_runq;
         /*
          * If we have system tasks of a priority higher
          * or equal to the user priority, we enqueue
@@ -9702,11 +9705,24 @@ Process *schedule(Process *p, int calls)
 	    erts_smp_spin_unlock(&erts_sched_stat.lock);
 	}
 
-	if (ERTS_PROC_PENDING_EXIT(p)) {
-	    erts_handle_pending_exit(p,
-				     ERTS_PROC_LOCK_MAIN|ERTS_PROC_LOCK_STATUS);
-	    state = erts_smp_atomic32_read_nob(&p->state);
+	state = erts_smp_atomic32_read_nob(&p->state);
+
+#ifdef ERTS_DIRTY_SCHEDULERS
+	if (state & (ERTS_PSFLG_PENDING_EXIT|ERTS_PSFLG_EXITING)) {
+	    if (ERTS_SCHEDULER_IS_DIRTY(esdp)) {
+		erts_smp_proc_unlock(p, ERTS_PROC_LOCK_STATUS);
+		goto sched_out_proc; /* migrate to ordinary scheduler */
+	    }
+#endif
+	    if (state & ERTS_PSFLG_PENDING_EXIT) {
+		erts_handle_pending_exit(p,
+					 ERTS_PROC_LOCK_MAIN|ERTS_PROC_LOCK_STATUS);
+		state = erts_smp_atomic32_read_nob(&p->state);
+	    }
+#ifdef ERTS_DIRTY_SCHEDULERS
 	}
+#endif
+
 	ASSERT(!p->scheduler_data);
 	p->scheduler_data = esdp;
 #endif
@@ -11535,6 +11551,11 @@ save_pending_exiter(Process *p)
     else
         rq = esdp->run_queue;
 
+#ifdef ERTS_DIRTY_SCHEDULERS
+    if (ERTS_RUNQ_IX_IS_DIRTY(rq->ix))
+	rq = ERTS_RUNQ_IX(0); /* Handle on ordinary scheduler */
+#endif
+
     plp = proclist_create(p);
 
     erts_smp_runq_lock(rq);
@@ -11544,13 +11565,8 @@ save_pending_exiter(Process *p)
     non_empty_runq(rq);
 
     erts_smp_runq_unlock(rq);
-#ifdef ERTS_DIRTY_SCHEDULERS
-    if (ERTS_RUNQ_IX_IS_DIRTY(rq->ix))
-	wake_dirty_schedulers(rq, 0);
-    else
-#endif
-	wake_scheduler(rq);
 
+    wake_scheduler(rq);
 }
 
 #endif
